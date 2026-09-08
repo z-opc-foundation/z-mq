@@ -96,6 +96,19 @@ public class BrokerController {
     private PullRequestHoldService pullRequestHoldService;
     private ScheduleMessageService scheduleMessageService;
 
+    /** v3 分布式组件: Broker OutAPI (Broker 互查接口). */
+    private com.zifang.z.mq.broker.outapi.BrokerOutAPI brokerOutAPI;
+
+    /** v3 分布式组件: SlaveSynchronize (仅 Slave 启动). */
+    private com.zifang.z.mq.broker.slave.SlaveSynchronize slaveSynchronize;
+
+    /**
+     * ConsumerOffset / DelayOffset 全局版本号 (每次 commit 自增).
+     * 由 BrokerController 持有以便 BrokerOutAPI 暴露给 Slave.
+     */
+    private final com.zifang.z.mq.common.ha.DataVersion consumerOffsetDataVersion = new com.zifang.z.mq.common.ha.DataVersion();
+    private final com.zifang.z.mq.common.ha.DataVersion delayOffsetDataVersion = new com.zifang.z.mq.common.ha.DataVersion();
+
     /**
      * 构造一个 Broker 控制器, 仅注入配置 (不会立即初始化/启动).
      *
@@ -171,9 +184,9 @@ public class BrokerController {
     }
 
     /**
-     * 向 Netty 远程服务端注册业务处理器 (发送消息 / 拉取消息 / 管理命令).
+     * 向 Netty 远程服务端注册业务处理器 (发送消息 / 拉取消息 / 管理命令 / BrokerOutAPI).
      * <p>
-     * 把三个处理器绑定到相应的 NettyRequestCode 上, 并各自使用独立的业务线程池
+     * 把四个处理器绑定到相应的 NettyRequestCode 上, 并各自使用独立的业务线程池
      * 隔离 IO 与业务执行, 避免慢调用拖垮 IO 线程.
      */
     private void registerProcessor() {
@@ -193,6 +206,19 @@ public class BrokerController {
                 RequestCode.UPDATE_AND_CREATE_TOPIC, this.adminBrokerProcessor, this.adminBrokerExecutor);
         this.remotingServer.registerProcessor(
                 RequestCode.GET_ALL_TOPIC_LIST, this.adminBrokerProcessor, this.adminBrokerExecutor);
+
+        // Broker OutAPI (Broker 互查接口, SlaveSynchronize 通过它拉取元数据)
+        this.brokerOutAPI = new com.zifang.z.mq.broker.outapi.BrokerOutAPI(this);
+        this.remotingServer.registerProcessor(
+                RequestCode.GET_ALL_TOPIC_CONFIG, this.brokerOutAPI, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.GET_ALL_CONSUMER_OFFSET, this.brokerOutAPI, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.GET_ALL_DELAY_OFFSET, this.brokerOutAPI, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.GET_ALL_SUBSCRIPTION_GROUP, this.brokerOutAPI, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.QUERY_DATA_VERSION, this.brokerOutAPI, this.adminBrokerExecutor);
     }
 
     /**
@@ -227,6 +253,25 @@ public class BrokerController {
                     log.warn("flush consumer offsets failed", e);
                 }
             }, 5_000L, 5_000L, TimeUnit.MILLISECONDS);
+
+            // v3 分布式: Slave 启动周期性同步任务 (默认 30s 一次)
+            if (!this.brokerConfig.isMaster() && this.brokerConfig.getBrokerMasterAddr() != null) {
+                this.slaveSynchronize = new com.zifang.z.mq.broker.slave.SlaveSynchronize(this);
+                this.slaveSynchronize.setMasterAddr(this.brokerConfig.getBrokerMasterAddr());
+                this.slaveSynchronize.start();
+                // 启动时立即同步一次, 然后周期同步
+                this.slaveSynchronize.syncAll();
+                final long interval = this.brokerConfig.getSyncAllIntervalMillis();
+                this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+                    try {
+                        this.slaveSynchronize.syncAll();
+                    } catch (Exception e) {
+                        log.warn("slave syncAll failed", e);
+                    }
+                }, interval, interval, TimeUnit.MILLISECONDS);
+                log.info("SlaveSynchronize started, master={} interval={}ms",
+                        this.brokerConfig.getBrokerMasterAddr(), interval);
+            }
 
             log.info("Broker started successfully");
         }
@@ -332,6 +377,11 @@ public class BrokerController {
                 this.consumerOffsetManager.shutdown();
             }
 
+            // v3 分布式: 关闭 SlaveSynchronize
+            if (this.slaveSynchronize != null) {
+                this.slaveSynchronize.shutdown();
+            }
+
             // 关闭线程池
             this.scheduledExecutorService.shutdown();
             this.sendMessageExecutor.shutdown();
@@ -384,5 +434,40 @@ public class BrokerController {
      */
     public ScheduleMessageService getScheduleMessageService() {
         return scheduleMessageService;
+    }
+
+    /**
+     * @return Broker OutAPI (Broker 互查接口处理器)
+     */
+    public com.zifang.z.mq.broker.outapi.BrokerOutAPI getBrokerOutAPI() {
+        return brokerOutAPI;
+    }
+
+    /**
+     * @return AdminBrokerProcessor
+     */
+    public com.zifang.z.mq.broker.processor.AdminBrokerProcessor getAdminBrokerProcessor() {
+        return adminBrokerProcessor;
+    }
+
+    /**
+     * @return ConsumerOffset 版本号 (暴露给 BrokerOutAPI)
+     */
+    public com.zifang.z.mq.common.ha.DataVersion getConsumerOffsetDataVersion() {
+        return consumerOffsetDataVersion;
+    }
+
+    /**
+     * @return DelayOffset 版本号
+     */
+    public com.zifang.z.mq.common.ha.DataVersion getDelayOffsetDataVersion() {
+        return delayOffsetDataVersion;
+    }
+
+    /**
+     * @return SlaveSynchronize (Slave 模式下非 null).
+     */
+    public com.zifang.z.mq.broker.slave.SlaveSynchronize getSlaveSynchronize() {
+        return slaveSynchronize;
     }
 }

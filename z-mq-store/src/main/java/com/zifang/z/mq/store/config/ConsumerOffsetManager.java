@@ -198,6 +198,40 @@ public class ConsumerOffsetManager {
         }
     }
 
+    /**
+     * 列出当前已知的所有 Topic (用于 SlaveSynchronize 增量同步遍历).
+     */
+    public java.util.Set<String> getAllKnownTopics() {
+        java.util.Set<String> topics = new java.util.HashSet<>();
+        for (OffsetEntry e : offsetTable.values()) {
+            if (e.getTopic() != null) {
+                topics.add(e.getTopic());
+            }
+        }
+        return topics;
+    }
+
+    /**
+     * 按 (topic, queueId) 聚合所有 ConsumerGroup 的最大 offset.
+     * <p>
+     * 用于 SlaveSynchronize 全量同步: key=group(String), value=offset.
+     */
+    public java.util.Map<String, Long> queryOffsetByGroupAndQueue(String topic, int queueId) {
+        java.util.Map<String, Long> result = new java.util.HashMap<>();
+        if (topic == null) return result;
+        for (java.util.Map.Entry<String, OffsetEntry> kv : offsetTable.entrySet()) {
+            OffsetEntry v = kv.getValue();
+            if (v.getTopic().equals(topic) && v.getQueueId() == queueId) {
+                // 同 (topic, queueId) 多 group 取最大
+                Long cur = result.get(v.getGroup());
+                if (cur == null || v.getOffset() > cur) {
+                    result.put(v.getGroup(), v.getOffset());
+                }
+            }
+        }
+        return result;
+    }
+
     // ============== 内部方法 ==============
 
     private static String makeKey(String topic, int queueId, String group) {

@@ -109,6 +109,29 @@ public class RequestCode {
     /** 客户端查询某 Topic 路由. */
     public static final int GET_ROUTE_BY_TOPIC = 311;
 
+    // ============== Broker 内部 RPC (Broker → Broker, 320-399) ==============
+
+    /** Slave 从 Master 拉取所有 Topic 配置. */
+    public static final int GET_ALL_TOPIC_CONFIG = 320;
+
+    /** Slave 从 Master 拉取所有 ConsumerOffset. */
+    public static final int GET_ALL_CONSUMER_OFFSET = 321;
+
+    /** Slave 从 Master 拉取所有 DelayOffset. */
+    public static final int GET_ALL_DELAY_OFFSET = 322;
+
+    /** Slave 从 Master 拉取所有 SubscriptionGroup 配置. */
+    public static final int GET_ALL_SUBSCRIPTION_GROUP = 323;
+
+    /** Slave 查询 Master 的数据版本号 (用于增量同步判断). */
+    public static final int QUERY_DATA_VERSION = 324;
+
+    /** Master 向 Slave 推送 CommitLog 数据块 (HA 通道). */
+    public static final int HA_PUSH_COMMITLOG = 350;
+
+    /** Slave 向 Master 报告本地最大 offset (HA 通道). */
+    public static final int HA_REPORT_OFFSET = 351;
+
     // ============== 管理命令 (400-499) ==============
 
     /** 创建/更新 Topic. */

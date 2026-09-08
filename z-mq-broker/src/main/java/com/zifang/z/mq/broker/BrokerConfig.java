@@ -9,12 +9,32 @@ package com.zifang.z.mq.broker;
  */
 public class BrokerConfig {
 
+    public static final long MASTER_ID = 0L;
+
     private String namesrvAddr = System.getenv("NAMESRV_ADDR");
     private String brokerName = System.getProperty("brokerName", "DEFAULT_BROKER");
     private String brokerClusterName = System.getProperty("brokerClusterName", "DEFAULT_CLUSTER");
+
+    /**
+     * Broker ID: 0 = Master (默认), 1+ = Slave.
+     * <p>
+     * Slave 启动时会从 {@link #brokerMasterAddr} 拉取元数据 + 同步 CommitLog.
+     */
+    private long brokerId = MASTER_ID;
+
+    /**
+     * Master Broker 地址 (仅 Slave 使用, 格式 ip:port).
+     * <p>
+     * SlaveSynchronize 会向这个地址发 GET_ALL_* / QUERY_DATA_VERSION 请求.
+     */
+    private volatile String brokerMasterAddr;
+
     private int sendMessageThreadPoolNums = 16;
     private int pullMessageThreadPoolNums = 16;
     private int adminBrokerThreadPoolNums = 4;
+
+    /** Slave 周期性同步 Master 元数据间隔 (毫秒). */
+    private long syncAllIntervalMillis = 30_000L;
 
     public String getNamesrvAddr() {
         return namesrvAddr;
@@ -38,6 +58,37 @@ public class BrokerConfig {
 
     public void setBrokerClusterName(String brokerClusterName) {
         this.brokerClusterName = brokerClusterName;
+    }
+
+    /**
+     * 是否是 Master Broker (brokerId == 0).
+     */
+    public boolean isMaster() {
+        return brokerId == MASTER_ID;
+    }
+
+    public long getBrokerId() {
+        return brokerId;
+    }
+
+    public void setBrokerId(long brokerId) {
+        this.brokerId = brokerId;
+    }
+
+    public String getBrokerMasterAddr() {
+        return brokerMasterAddr;
+    }
+
+    public void setBrokerMasterAddr(String brokerMasterAddr) {
+        this.brokerMasterAddr = brokerMasterAddr;
+    }
+
+    public long getSyncAllIntervalMillis() {
+        return syncAllIntervalMillis;
+    }
+
+    public void setSyncAllIntervalMillis(long syncAllIntervalMillis) {
+        this.syncAllIntervalMillis = syncAllIntervalMillis;
     }
 
     public int getSendMessageThreadPoolNums() {

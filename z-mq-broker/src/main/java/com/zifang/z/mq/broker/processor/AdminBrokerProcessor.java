@@ -3,6 +3,7 @@ package com.zifang.z.mq.broker.processor;
 import com.zifang.z.mq.broker.BrokerController;
 import com.zifang.z.mq.common.QueueData;
 import com.zifang.z.mq.common.TopicConfig;
+import com.zifang.z.mq.common.ha.DataVersion;
 import com.zifang.z.mq.remoting.netty.NettyRemotingAbstract;
 import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
@@ -13,7 +14,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -23,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>CREATE_TOPIC — 创建 Topic（默认 4 读 4 写队列）</li>
  *   <li>VIEW_TOPIC — 查看 Topic 配置</li>
+ *   <li>GET_ALL_TOPIC_CONFIG — 全量导出 (供 SlaveSynchronize 同步)</li>
  * </ul>
  */
 public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestProcessor {
@@ -31,6 +35,9 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
 
     /** 本地 Topic 配置缓存 (subscriber reuse). */
     private final ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<>();
+
+    /** TopicConfig 版本号 (每次 CREATE/UPDATE/DELETE 自增, 用于 Slave 增量同步). */
+    private final DataVersion topicConfigDataVersion = new DataVersion();
 
     private final BrokerController brokerController;
 
@@ -73,6 +80,7 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
         int writeN = writeNStr == null ? TopicConfig.DEFAULT_WRITE_QUEUE_NUMS : Integer.parseInt(writeNStr);
         TopicConfig config = new TopicConfig(topic, readN, writeN, TopicConfig.PERM_READ_WRITE);
         topicConfigTable.put(topic, config);
+        topicConfigDataVersion.assignNewVersion();
         log.info("Topic created: {} read={} write={}", topic, readN, writeN);
 
         CreateTopicResult body = new CreateTopicResult();
@@ -105,6 +113,33 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
 
     public TopicConfig getTopicConfig(String topic) {
         return topicConfigTable.get(topic);
+    }
+
+    /**
+     * 全量 TopicConfig 快照 (供 BrokerOutAPI / SlaveSynchronize).
+     */
+    public Map<String, TopicConfig> getAllTopicConfigs() {
+        return new HashMap<>(topicConfigTable);
+    }
+
+    /**
+     * 批量替换 TopicConfigTable 内容 (供 SlaveSynchronize 使用).
+     * <p>
+     * 用 incoming 完全替换本地表 (包括删除 incoming 中没有的条目).
+     */
+    public void replaceAllTopicConfigs(Map<String, TopicConfig> incoming) {
+        topicConfigTable.clear();
+        if (incoming != null) {
+            topicConfigTable.putAll(incoming);
+        }
+        topicConfigDataVersion.assignNewVersion();
+    }
+
+    /**
+     * TopicConfig 版本号 (每次 CREATE/UPDATE/DELETE 自增).
+     */
+    public DataVersion getTopicConfigDataVersion() {
+        return topicConfigDataVersion;
     }
 
     @Override
