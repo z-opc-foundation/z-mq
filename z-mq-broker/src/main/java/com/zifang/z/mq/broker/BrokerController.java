@@ -102,6 +102,9 @@ public class BrokerController {
     /** v3 分布式组件: SlaveSynchronize (仅 Slave 启动). */
     private com.zifang.z.mq.broker.slave.SlaveSynchronize slaveSynchronize;
 
+    /** v3 HA: 主从同步服务 (HAService 接口). */
+    private com.zifang.z.mq.store.ha.HAService haService;
+
     /**
      * ConsumerOffset / DelayOffset 全局版本号 (每次 commit 自增).
      * 由 BrokerController 持有以便 BrokerOutAPI 暴露给 Slave.
@@ -148,6 +151,15 @@ public class BrokerController {
 
             this.scheduleMessageService = new ScheduleMessageService();
             // scheduleMessageService 在 start() 时才启动 (后续)
+
+            // v3 HA: 创建 HAService (Master / Slave 通用, 内部根据 brokerConfig.isMaster() 切换)
+            this.haService = new com.zifang.z.mq.broker.ha.DefaultHAService(this);
+            // 把 HA 回调注入 CommitLog, putMessage 成功后通知 HA 服务
+            this.commitLog.setHaCallback((offset, body) -> {
+                if (this.haService != null) {
+                    this.haService.notifyMessageArrived(offset, body);
+                }
+            });
 
             // 初始化Netty服务端
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig);
@@ -219,6 +231,11 @@ public class BrokerController {
                 RequestCode.GET_ALL_SUBSCRIPTION_GROUP, this.brokerOutAPI, this.adminBrokerExecutor);
         this.remotingServer.registerProcessor(
                 RequestCode.QUERY_DATA_VERSION, this.brokerOutAPI, this.adminBrokerExecutor);
+
+        // v3 HA: HA Processor (处理 Slave 上报 offset 等)
+        com.zifang.z.mq.broker.ha.HAProcessor haProcessor = new com.zifang.z.mq.broker.ha.HAProcessor(this);
+        this.remotingServer.registerProcessor(
+                RequestCode.HA_REPORT_OFFSET, haProcessor, this.adminBrokerExecutor);
     }
 
     /**
@@ -236,6 +253,9 @@ public class BrokerController {
             // 启动 v2 增强组件
             this.pullRequestHoldService.start();
             this.scheduleMessageService.start();
+
+            // v3 HA: 启动 HAService (Master 模式启动 push 线程, Slave 模式启动 sync 线程)
+            this.haService.start();
 
             // 启动Netty服务端
             this.remotingServer.start();
@@ -298,6 +318,17 @@ public class BrokerController {
     }
 
     /**
+     * 立即重新注册到 NameServer (Topic 创建后调用, 使新 Topic 尽快可见).
+     */
+    public void reRegisterToNameServer() {
+        try {
+            registerBrokerAll(false, false);
+        } catch (Exception e) {
+            log.warn("reRegisterToNameServer failed", e);
+        }
+    }
+
+    /**
      * 向所有配置的 NameServer 注册本 Broker, 维持心跳.
      *
      * @param checkOrderConfig 是否需要核对顺序消息配置 (MVP 忽略)
@@ -323,9 +354,10 @@ public class BrokerController {
                 request.addExtField("brokerId", String.valueOf(com.zifang.z.mq.common.BrokerData.MASTER_ID));
                 request.addExtField("haServerAddr", "");
 
-                // 上报本地 TopicConfig (MVP 暂传空 list)
-                List<TopicConfig> emptyList = Collections.emptyList();
-                request.setBody(JsonCodec.encode(emptyList));
+                // 上报本地 TopicConfig
+                List<TopicConfig> topicConfigs = new java.util.ArrayList<>(
+                        this.adminBrokerProcessor.getAllTopicConfigs().values());
+                request.setBody(JsonCodec.encode(topicConfigs));
 
                 RemotingCommand response = namesrvRemotingClient.invokeSync(channel, request, 3000);
                 if (response != null && response.getCode() == com.zifang.z.mq.remoting.netty.RemotingSysResponseCode.SUCCESS
@@ -380,6 +412,11 @@ public class BrokerController {
             // v3 分布式: 关闭 SlaveSynchronize
             if (this.slaveSynchronize != null) {
                 this.slaveSynchronize.shutdown();
+            }
+
+            // v3 HA: 关闭 HAService
+            if (this.haService != null) {
+                this.haService.shutdown();
             }
 
             // 关闭线程池
@@ -469,5 +506,12 @@ public class BrokerController {
      */
     public com.zifang.z.mq.broker.slave.SlaveSynchronize getSlaveSynchronize() {
         return slaveSynchronize;
+    }
+
+    /**
+     * @return HAService (主从同步服务).
+     */
+    public com.zifang.z.mq.store.ha.HAService getHaService() {
+        return haService;
     }
 }

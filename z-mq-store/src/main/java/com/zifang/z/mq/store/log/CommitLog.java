@@ -47,6 +47,18 @@ public class CommitLog {
     // 进程内 Queue 索引 — 给 MVP PullMessageProcessor 提供 (topic, queueId) → 消息 的查询能力
     private final InMemoryQueueIndex queueIndex = new InMemoryQueueIndex();
 
+    /**
+     * HA 同步回调 (可选). 设置后, putMessage 成功时会通知 HA 服务.
+     */
+    private volatile HaAppendCallback haCallback;
+
+    /**
+     * 设置 HA 同步回调 (BrokerController 在 start() 时注入).
+     */
+    public void setHaCallback(HaAppendCallback callback) {
+        this.haCallback = callback;
+    }
+
     public CommitLog(final MessageStoreConfig messageStoreConfig) {
         this.messageStoreConfig = messageStoreConfig;
         this.mappedFileQueue = new MappedFileQueue(
@@ -139,6 +151,10 @@ public class CommitLog {
         // 写入成功后建立进程内索引 (供 PullMessageProcessor 查询)
         if (result.getStatus() == AppendMessageResult.AppendMessageStatus.PUT_OK) {
             queueIndex.append(msg.getTopic(), msg.getQueueId(), msg);
+            // 通知 HA 服务 (主从同步): Master 模式会异步推送给所有 Slave
+            if (haCallback != null) {
+                haCallback.onMessageAppended(result.getWroteOffset(), encoded);
+            }
         }
 
         return new PutMessageResult(PutMessageStatus.PUT_OK, result);
