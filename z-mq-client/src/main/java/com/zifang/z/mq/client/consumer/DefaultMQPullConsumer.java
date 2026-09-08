@@ -130,7 +130,10 @@ public class DefaultMQPullConsumer {
     }
 
     private String lookupBrokerAddr(TopicRouteData routeData, String brokerName) {
-        if (routeData == null || routeData.getBrokerDatas() == null) return null;
+        if (routeData == null || routeData.getBrokerDatas() == null) {
+            return null;
+        }
+
         for (BrokerData bd : routeData.getBrokerDatas()) {
             if (bd.getBrokerName().equals(brokerName)) {
                 return bd.selectBrokerAddr();

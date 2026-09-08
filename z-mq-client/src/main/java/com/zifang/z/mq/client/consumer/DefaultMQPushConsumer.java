@@ -117,14 +117,20 @@ public class DefaultMQPushConsumer {
             for (Map.Entry<String, SubscriptionData> entry : subscriptionTable.entrySet()) {
                 String topic = entry.getKey();
                 TopicRouteData routeData = mqClientInstance.getTopicRouteData(topic);
-                if (routeData == null || routeData.getQueueDatas() == null) continue;
+                if (routeData == null || routeData.getQueueDatas() == null) {
+                    continue;
+                }
 
                 // 收集所有 (broker, queueId) 对
                 Set<String> seenBrokers = new HashSet<>();
                 for (BrokerData bd : routeData.getBrokerDatas()) {
-                    if (!seenBrokers.add(bd.getBrokerName())) continue;
+                    if (!seenBrokers.add(bd.getBrokerName())) {
+                        continue;
+                    }
                     String brokerAddr = bd.selectBrokerAddr();
-                    if (brokerAddr == null) continue;
+                    if (brokerAddr == null) {
+                        continue;
+                    }
                     int qNums = findWriteQueueNums(routeData, bd.getBrokerName());
                     for (int q = 0; q < qNums; q++) {
                         MessageQueue mq = new MessageQueue(topic, bd.getBrokerName(), q);

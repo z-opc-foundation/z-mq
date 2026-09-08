@@ -106,8 +106,10 @@ public class ZmqE2ETest {
 
     @AfterAll
     public void stopCluster() {
-        if (broker != null) broker.shutdown();
-        if (nameServer != null) nameServer.shutdown();
+        if (broker != null) { broker.shutdown(); }
+
+        if (nameServer != null) { nameServer.shutdown(); }
+
     }
 
     private void waitForBrokerRegistration(long timeoutMillis) throws Exception {
@@ -161,7 +163,8 @@ public class ZmqE2ETest {
                 assertNotNull(pr);
                 total += pr.getMsgFoundList().size();
                 offset = pr.getNextOffset();
-                if (pr.getMsgFoundList().isEmpty()) Thread.sleep(200);
+                if (pr.getMsgFoundList().isEmpty()) { Thread.sleep(200); }
+
             }
             assertEquals(10, total, "should pull exactly 10 messages");
             log.info("PullConsumer pulled {} messages", total);
@@ -393,8 +396,10 @@ public class ZmqE2ETest {
 
     private MessageQueue pickFirstQueue(String topic, TopicRouteData route) {
         if (route == null || route.getBrokerDatas() == null) return null;
+
         for (com.zifang.z.mq.common.BrokerData bd : route.getBrokerDatas()) {
             if (bd.selectBrokerAddr() == null) continue;
+
             for (com.zifang.z.mq.common.QueueData qd : route.getQueueDatas()) {
                 if (qd.getBrokerName().equals(bd.getBrokerName())) {
                     return new MessageQueue(topic, bd.getBrokerName(), 0);

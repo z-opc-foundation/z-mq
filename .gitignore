@@ -1,0 +1,32 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Test
+*.log
+test-output/
+test-outputs/
+coverage/
+
+# Misc
+*.bak
+*.tmp
+*.swp
+*~

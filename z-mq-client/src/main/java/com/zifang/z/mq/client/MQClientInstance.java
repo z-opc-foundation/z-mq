@@ -168,6 +168,12 @@ public class MQClientInstance {
         }
         try {
             ch = remotingClient.getOrCreateChannel(addr);
+            // 防御: ch 可能为 null (createChannel 内部重试都失败时)
+            // 同时不应将 null 写入 ConcurrentHashMap, 否则后续取出触发 NPE
+            if (ch == null) {
+                log.warn("getOrCreateBrokerChannel: no active channel for {}", addr);
+                return null;
+            }
             brokerChannelTable.put(key, ch);
             return ch;
         } catch (Exception e) {
@@ -187,7 +193,9 @@ public class MQClientInstance {
         List<MessageQueue> writableQueues = new ArrayList<>();
         for (BrokerData brokerData : routeData.getBrokerDatas()) {
             String masterAddr = brokerData.selectBrokerAddr();
-            if (masterAddr == null) continue;
+            if (masterAddr == null) {
+                continue;
+            }
             for (com.zifang.z.mq.common.QueueData qd : routeData.getQueueDatas()) {
                 if (qd.getBrokerName().equals(brokerData.getBrokerName())) {
                     for (int i = 0; i < qd.getWriteQueueNums(); i++) {
@@ -212,7 +220,7 @@ public class MQClientInstance {
         List<MessageQueue> queues = new ArrayList<>();
         for (BrokerData brokerData : routeData.getBrokerDatas()) {
             String masterAddr = brokerData.selectBrokerAddr();
-            if (masterAddr == null) continue;
+            if (masterAddr == null) { continue; }
             for (com.zifang.z.mq.common.QueueData qd : routeData.getQueueDatas()) {
                 if (qd.getBrokerName().equals(brokerData.getBrokerName())) {
                     for (int i = 0; i < qd.getWriteQueueNums(); i++) {
@@ -250,8 +258,18 @@ public class MQClientInstance {
             if (e instanceof RemotingSendRequestException) {
                 throw (RemotingSendRequestException) e;
             }
+            // 防御: channel.remoteAddress() 可能为 null (mock / 极端断连)
+            // 不应 NPE, 改用 channel.id() 作为可读标识
+            String addr;
+            try {
+                addr = channel.remoteAddress() != null
+                        ? channel.remoteAddress().toString()
+                        : String.valueOf(channel.id());
+            } catch (Exception ex) {
+                addr = String.valueOf(channel.id());
+            }
             throw new RemotingSendRequestException(
-                    RemotingSendRequestException.newSendRequestException(channel.remoteAddress().toString(), e));
+                    RemotingSendRequestException.newSendRequestException(addr, e));
         }
     }
 

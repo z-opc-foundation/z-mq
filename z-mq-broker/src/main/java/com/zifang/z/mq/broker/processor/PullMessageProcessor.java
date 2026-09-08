@@ -13,13 +13,14 @@ import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Broker 端"拉取消息"处理器（对标 RocketMQ PullMessageProcessor）.
  * <p>
- * MVP 实现：根据 CommitLog 累计位置粗略切片返回, 没有真正的 ConsumeQueue 索引。
+ * 当前实现通过 CommitLog.getQueueIndex() 的进程内 InMemoryQueueIndex 查询真实写入的消息,
+ * 保证 nextOffset 单调递增和消息内容一致性。
+ * <p>
  * 完整实现需引入 ConsumeQueue + IndexFile 双层索引（未在 MVP 范围内）。
  */
 public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestProcessor {
@@ -60,9 +61,11 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         }
 
         List<MessageExt> messages = readMessages(commitLog, topic, queueId, offset, maxNum);
-        long minOffset = offset;
-        long maxOffset = offset + messages.size();
-        PullResultPayload body = new PullResultPayload(topic, queueId, maxOffset, minOffset, maxOffset, messages);
+        long maxOffset = commitLog.getQueueIndex().getMaxOffset(topic, queueId);
+        long minOffset = messages.isEmpty() ? maxOffset : messages.get(0).getQueueOffset();
+        // nextOffset 应为最后一条消息的 offset +1, 而非 maxOffset
+        long nextOffset = messages.isEmpty() ? offset : messages.get(messages.size() - 1).getQueueOffset() + 1;
+        PullResultPayload body = new PullResultPayload(topic, queueId, nextOffset, minOffset, maxOffset, messages);
         response.setBody(JsonCodec.encode(body));
         return response;
     }
@@ -73,25 +76,14 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
     }
 
     /**
-     * MVP 读策略：基于 CommitLog 累计位置粗略切片。
+     * 从进程内 InMemoryQueueIndex 查询真实消息。
+     * <p>
+     * nextOffset 由 InMemoryQueueIndex 保证单调递增, 内容来自 CommitLog.putMessage 实际写入的消息。
      */
     private List<MessageExt> readMessages(CommitLog commitLog, String topic, int queueId, long offset, int maxNum) {
-        List<MessageExt> result = new ArrayList<>();
-        if (commitLog.getMappedFileQueue() == null) {
-            return result;
+        if (commitLog.getQueueIndex() == null) {
+            return java.util.Collections.emptyList();
         }
-        int actualCount = Math.min(maxNum, 10);
-        for (int i = 0; i < actualCount; i++) {
-            MessageExt msg = new MessageExt();
-            msg.setTopic(topic);
-            msg.setQueueId(queueId);
-            msg.setQueueOffset(offset + i);
-            msg.setMsgId("MOCK-" + queueId + "-" + (offset + i));
-            msg.setBody(("msg#" + i + "@queue" + queueId).getBytes());
-            msg.setBornTimestamp(System.currentTimeMillis() - actualCount + i);
-            result.add(msg);
-        }
-        log.warn("PullMessageProcessor is using MVP mock read; full ConsumeQueue is not implemented yet");
-        return result;
+        return commitLog.getQueueIndex().query(topic, queueId, offset, maxNum);
     }
 }

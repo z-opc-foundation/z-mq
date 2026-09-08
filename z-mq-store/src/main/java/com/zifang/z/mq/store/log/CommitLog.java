@@ -44,6 +44,8 @@ public class CommitLog {
     private final ThreadLocal<ByteBuffer> msgStoreItemMemory;
     // 刷盘服务
     private final FlushCommitLogService flushCommitLogService;
+    // 进程内 Queue 索引 — 给 MVP PullMessageProcessor 提供 (topic, queueId) → 消息 的查询能力
+    private final InMemoryQueueIndex queueIndex = new InMemoryQueueIndex();
 
     public CommitLog(final MessageStoreConfig messageStoreConfig) {
         this.messageStoreConfig = messageStoreConfig;
@@ -133,6 +135,11 @@ public class CommitLog {
 
         // 根据刷盘策略处理
         handleFlushAndHA(result);
+
+        // 写入成功后建立进程内索引 (供 PullMessageProcessor 查询)
+        if (result.getStatus() == AppendMessageResult.AppendMessageStatus.PUT_OK) {
+            queueIndex.append(msg.getTopic(), msg.getQueueId(), msg);
+        }
 
         return new PutMessageResult(PutMessageStatus.PUT_OK, result);
     }
@@ -299,6 +306,13 @@ public class CommitLog {
      */
     public MappedFileQueue getMappedFileQueue() {
         return mappedFileQueue;
+    }
+
+    /**
+     * 获取进程内 Queue 索引 — 供 PullMessageProcessor 查询真实消息内容。
+     */
+    public InMemoryQueueIndex getQueueIndex() {
+        return queueIndex;
     }
 
     /**

@@ -229,7 +229,8 @@ public class BrokerController {
         String[] addrs = namesrvAddr.split(";");
         for (String addr : addrs) {
             String trimmed = addr.trim();
-            if (trimmed.isEmpty()) continue;
+            if (trimmed.isEmpty()) { continue; }
+
             try {
                 Channel channel = namesrvRemotingClient.getOrCreateChannel(trimmed);
                 RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER);

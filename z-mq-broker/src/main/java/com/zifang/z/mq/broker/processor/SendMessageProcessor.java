@@ -147,7 +147,8 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         }
 
         static void incSendSuccess(boolean ok) {
-            if (ok) SEND_SUCCESS.incrementAndGet();
+            if (ok) { SEND_SUCCESS.incrementAndGet(); }
+
         }
 
         public static long getSendCount() { return SEND_COUNT.get(); }

@@ -50,8 +50,9 @@ public class MessageQueue implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageQueue)) return false;
+        if (this == o) { return true; }
+
+        if (!(o instanceof MessageQueue)) { return false; }
         MessageQueue that = (MessageQueue) o;
         return queueId == that.queueId
                 && (topic != null ? topic.equals(that.topic) : that.topic == null)
