@@ -1,5 +1,7 @@
 package com.zifang.z.mq.broker;
 
+import com.zifang.z.mq.broker.delay.ScheduleMessageService;
+import com.zifang.z.mq.broker.longpoll.PullRequestHoldService;
 import com.zifang.z.mq.broker.processor.AdminBrokerProcessor;
 import com.zifang.z.mq.broker.processor.PullMessageProcessor;
 import com.zifang.z.mq.broker.processor.SendMessageProcessor;
@@ -13,6 +15,7 @@ import com.zifang.z.mq.remoting.netty.NettyServerConfig;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
 import com.zifang.z.mq.store.MessageStoreConfig;
+import com.zifang.z.mq.store.config.ConsumerOffsetManager;
 import com.zifang.z.mq.store.log.CommitLog;
 import io.netty.channel.Channel;
 import org.apache.logging.log4j.LogManager;
@@ -82,6 +85,18 @@ public class BrokerController {
     private PullMessageProcessor pullMessageProcessor;
 
     /**
+     * v2 增强组件:
+     * <ul>
+     *   <li>consumerOffsetManager: 消费位点持久化, 跨重启恢复</li>
+     *   <li>pullRequestHoldService: Pull 长轮询, 新消息毫秒级响应</li>
+     *   <li>scheduleMessageService: 18 级内置延迟消息</li>
+     * </ul>
+     */
+    private ConsumerOffsetManager consumerOffsetManager;
+    private PullRequestHoldService pullRequestHoldService;
+    private ScheduleMessageService scheduleMessageService;
+
+    /**
      * 构造一个 Broker 控制器, 仅注入配置 (不会立即初始化/启动).
      *
      * @param brokerConfig       Broker 自身配置
@@ -110,6 +125,16 @@ public class BrokerController {
                 log.error("load commitlog failed");
                 return false;
             }
+
+            // 初始化 v2 增强组件
+            this.consumerOffsetManager = new ConsumerOffsetManager(this.messageStoreConfig.getStorePathRootDir());
+            this.consumerOffsetManager.start();
+
+            this.pullRequestHoldService = new PullRequestHoldService();
+            // pullRequestHoldService 在 start() 时才启动 (后续)
+
+            this.scheduleMessageService = new ScheduleMessageService();
+            // scheduleMessageService 在 start() 时才启动 (后续)
 
             // 初始化Netty服务端
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig);
@@ -182,6 +207,10 @@ public class BrokerController {
             // 启动CommitLog
             this.commitLog.start();
 
+            // 启动 v2 增强组件
+            this.pullRequestHoldService.start();
+            this.scheduleMessageService.start();
+
             // 启动Netty服务端
             this.remotingServer.start();
 
@@ -189,6 +218,15 @@ public class BrokerController {
             if (this.brokerConfig.getNamesrvAddr() != null && !this.brokerConfig.getNamesrvAddr().isEmpty()) {
                 this.startRegisterToNameServer();
             }
+
+            // 启动周期 flush 任务 (5s 一次持久化 consumer offset)
+            this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+                try {
+                    this.consumerOffsetManager.flushIfNecessary();
+                } catch (Exception e) {
+                    log.warn("flush consumer offsets failed", e);
+                }
+            }, 5_000L, 5_000L, TimeUnit.MILLISECONDS);
 
             log.info("Broker started successfully");
         }
@@ -281,6 +319,19 @@ public class BrokerController {
             // 停止CommitLog
             this.commitLog.shutdown();
 
+            // 停止 v2 增强组件
+            if (this.pullRequestHoldService != null) {
+                this.pullRequestHoldService.shutdown();
+            }
+
+            if (this.scheduleMessageService != null) {
+                this.scheduleMessageService.shutdown();
+            }
+
+            if (this.consumerOffsetManager != null) {
+                this.consumerOffsetManager.shutdown();
+            }
+
             // 关闭线程池
             this.scheduledExecutorService.shutdown();
             this.sendMessageExecutor.shutdown();
@@ -312,5 +363,26 @@ public class BrokerController {
      */
     public CommitLog getCommitLog() {
         return commitLog;
+    }
+
+    /**
+     * @return Consumer 位点管理器
+     */
+    public ConsumerOffsetManager getConsumerOffsetManager() {
+        return consumerOffsetManager;
+    }
+
+    /**
+     * @return Pull 长轮询服务
+     */
+    public PullRequestHoldService getPullRequestHoldService() {
+        return pullRequestHoldService;
+    }
+
+    /**
+     * @return 延迟消息服务
+     */
+    public ScheduleMessageService getScheduleMessageService() {
+        return scheduleMessageService;
     }
 }
