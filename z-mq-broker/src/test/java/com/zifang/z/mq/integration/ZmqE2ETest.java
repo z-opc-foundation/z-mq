@@ -152,22 +152,34 @@ public class ZmqE2ETest {
         consumer.start();
         try {
             TopicRouteData route = fetchRoute(topic);
-            MessageQueue mq = pickFirstQueue(topic, route);
-            assertNotNull(mq, "should pick a queue");
+            // Producer 用 round-robin 分散到 4 个 queue, 测试需要遍历所有 queue 才能拉到全部
+            List<MessageQueue> allQueues = pickAllQueues(topic, route);
+            assertNotNull(allQueues);
+            assertTrue(!allQueues.isEmpty(), "should pick at least one queue");
 
             int total = 0;
-            long offset = 0;
             long deadline = System.currentTimeMillis() + 5000;
-            while (total < 10 && System.currentTimeMillis() < deadline) {
-                DefaultMQPullConsumer.PullResult pr = consumer.pull(mq, offset, 16);
-                assertNotNull(pr);
-                total += pr.getMsgFoundList().size();
-                offset = pr.getNextOffset();
-                if (pr.getMsgFoundList().isEmpty()) { Thread.sleep(200); }
-
+            for (MessageQueue mq : allQueues) {
+                long offset = 0;
+                int emptyCount = 0;
+                while (total < 10 && System.currentTimeMillis() < deadline) {
+                    DefaultMQPullConsumer.PullResult pr = consumer.pull(mq, offset, 16);
+                    assertNotNull(pr);
+                    int got = pr.getMsgFoundList().size();
+                    total += got;
+                    offset = pr.getNextOffset();
+                    if (got == 0) {
+                        emptyCount++;
+                        // 连续 2 次空就跳出本 queue
+                        if (emptyCount >= 2) break;
+                        Thread.sleep(200);
+                    } else {
+                        emptyCount = 0;
+                    }
+                }
             }
             assertEquals(10, total, "should pull exactly 10 messages");
-            log.info("PullConsumer pulled {} messages", total);
+            log.info("PullConsumer pulled {} messages across {} queues", total, allQueues.size());
         } finally {
             consumer.shutdown();
         }
@@ -244,14 +256,20 @@ public class ZmqE2ETest {
         consumer.start();
         try {
             TopicRouteData route = fetchRoute(topic);
-            MessageQueue mq = pickFirstQueue(topic, route);
-            DefaultMQPullConsumer.PullResult pr = consumer.pull(mq, 0, 8);
-            // MVP pull mock: 实际生产中应返回原消息体, 当前 PullMessageProcessor 是 mock
-            assertNotNull(pr, "pull result not null");
-            assertTrue(pr.getMsgFoundList().size() >= 1,
-                    "should pull at least 1 message (got " + pr.getMsgFoundList().size() + ")");
-            log.info("Large message pull: status={} size={}",
-                    pr.getStatus(), pr.getMsgFoundList().size());
+            // 遍历所有 queue, 找到至少 1 条消息
+            List<MessageQueue> allQueues = pickAllQueues(topic, route);
+            assertNotNull(allQueues);
+            assertTrue(!allQueues.isEmpty(), "should pick at least one queue");
+
+            int total = 0;
+            for (MessageQueue mq : allQueues) {
+                DefaultMQPullConsumer.PullResult pr = consumer.pull(mq, 0, 8);
+                assertNotNull(pr, "pull result not null");
+                total += pr.getMsgFoundList().size();
+                if (total > 0) break;  // 找到消息就退出
+            }
+            assertTrue(total >= 1, "should pull at least 1 message (got " + total + ")");
+            log.info("Large message pulled {} message across all queues", total);
         } finally {
             consumer.shutdown();
         }
@@ -407,5 +425,29 @@ public class ZmqE2ETest {
             }
         }
         return null;
+    }
+
+    /**
+     * 拿到该 Topic 在该 Broker 上的所有 MessageQueue (queueId 0..readQueueNums-1).
+     * <p>
+     * Producer 端 selectOneMessageQueue 是 round-robin 分发到 readQueueNums 个 queue,
+     * 所以 Consumer 端必须遍历所有 queue 才能拉到完整消息.
+     */
+    private List<MessageQueue> pickAllQueues(String topic, TopicRouteData route) {
+        List<MessageQueue> all = new java.util.ArrayList<>();
+        if (route == null || route.getBrokerDatas() == null) return all;
+
+        for (com.zifang.z.mq.common.BrokerData bd : route.getBrokerDatas()) {
+            if (bd.selectBrokerAddr() == null) continue;
+            for (com.zifang.z.mq.common.QueueData qd : route.getQueueDatas()) {
+                if (qd.getBrokerName().equals(bd.getBrokerName())) {
+                    int readQ = qd.getReadQueueNums();
+                    for (int i = 0; i < readQ; i++) {
+                        all.add(new MessageQueue(topic, bd.getBrokerName(), i));
+                    }
+                }
+            }
+        }
+        return all;
     }
 }
