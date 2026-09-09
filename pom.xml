@@ -22,6 +22,7 @@
         <module>z-mq-broker</module>
         <module>z-mq-client</module>
         <module>z-mq-spring-boot-starter</module>
+        <module>z-mq-tools</module>
     </modules>
 
     <properties>
