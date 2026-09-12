@@ -10,6 +10,7 @@
         <version>1.0.2</version>
     </parent>
     <groupId>io.github.yuku123</groupId>
+    <version>1.0.2</version>
 
     <artifactId>z-mq-spring-boot-starter</artifactId>
     <packaging>jar</packaging>
