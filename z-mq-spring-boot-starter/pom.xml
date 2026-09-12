@@ -22,20 +22,24 @@
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-client</artifactId>
+            <version>1.0.2</version>
         </dependency>
 
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+            <version>2.7.18</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
+            <version>2.7.18</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
+            <version>2.7.18</version>
             <optional>true</optional>
         </dependency>
 
@@ -43,8 +47,38 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <version>2.7.18</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <url>https://github.com/yuku123/z-mq</url>
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+    <developers>
+        <developer>
+            <id>yuku123</id>
+            <name>yuku123</name>
+            <email>1340947819@qq.com</email>
+            <organization>z-team</organization>
+            <organizationUrl>https://github.com/yuku123</organizationUrl>
+            <timezone>+08:00</timezone>
+            <roles>
+                <role>owner</role>
+            </roles>
+        </developer>
+    </developers>
+    <scm>
+        <connection>scm:git:https://github.com/yuku123/z-mq.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/yuku123/z-mq.git</developerConnection>
+        <url>https://github.com/yuku123/z-mq</url>
+        <tag>HEAD</tag>
+    </scm>
+
 
 </project>
