@@ -30,3 +30,6 @@ coverage/
 *.tmp
 *.swp
 *~
+# Maven Central 发布凭证 (z-mq)
+.env
+.gnupg/
