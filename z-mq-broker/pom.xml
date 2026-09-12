@@ -18,6 +18,34 @@
     <name>Z-MQ Broker</name>
     <description>Broker for Z-MQ - Message storage and delivery</description>
 
+    <url>https://github.com/yuku123/z-mq</url>
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+    <developers>
+        <developer>
+            <id>yuku123</id>
+            <name>yuku123</name>
+            <email>1340947819@qq.com</email>
+            <organization>z-team</organization>
+            <organizationUrl>https://github.com/yuku123</organizationUrl>
+            <timezone>+08:00</timezone>
+            <roles>
+                <role>owner</role>
+            </roles>
+        </developer>
+    </developers>
+    <scm>
+        <connection>scm:git:https://github.com/yuku123/z-mq.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/yuku123/z-mq.git</developerConnection>
+        <url>https://github.com/yuku123/z-mq</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <dependencies>
         <dependency>
             <groupId>io.github.yuku123</groupId>
@@ -87,35 +115,6 @@
 
 
     </dependencies>
-
-    <url>https://github.com/yuku123/z-mq</url>
-    <licenses>
-        <license>
-            <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
-            <distribution>repo</distribution>
-        </license>
-    </licenses>
-    <developers>
-        <developer>
-            <id>yuku123</id>
-            <name>yuku123</name>
-            <email>1340947819@qq.com</email>
-            <organization>z-team</organization>
-            <organizationUrl>https://github.com/yuku123</organizationUrl>
-            <timezone>+08:00</timezone>
-            <roles>
-                <role>owner</role>
-            </roles>
-        </developer>
-    </developers>
-    <scm>
-        <connection>scm:git:https://github.com/yuku123/z-mq.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/yuku123/z-mq.git</developerConnection>
-        <url>https://github.com/yuku123/z-mq</url>
-        <tag>HEAD</tag>
-    </scm>
-
 
     <build>
         <plugins>
