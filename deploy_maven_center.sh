@@ -139,9 +139,9 @@ cmd_publish() {
     check_deps
 
     log "═══════════════════════════════════════════════════════════════"
-    log " 即将把 z-cache 上传到 Maven Central"
+    log " 即将把 z-mq 上传到 Maven Central"
     log "  groupId : io.github.yuku123"
-    log "  version : $(grep '<version>1.0.1</version>' pom.xml | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/')"
+    log "  version : $(grep '<version>1.0.2</version>' pom.xml | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/')"
     log "  GPG KEY : ${GPG_KEY_ID:-?}"
     log "═══════════════════════════════════════════════════════════════"
 
