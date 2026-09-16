@@ -1,0 +1,31 @@
+{
+  "name": "z-mq-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Z-MQ 控制台 — 集群 / Topic / Producer / Consumer 可视化管理",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview --port 8081",
+    "lint": "eslint . --ext .vue,.js,.ts,.jsx,.tsx --fix",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2",
+    "pinia": "^2.1.7",
+    "axios": "^1.7.2",
+    "echarts": "^5.5.0",
+    "vue-echarts": "^7.0.3",
+    "element-plus": "^2.7.5",
+    "@element-plus/icons-vue": "^2.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "typescript": "~5.4.5",
+    "vite": "^5.2.11",
+    "vue-tsc": "^2.0.19"
+  }
+}

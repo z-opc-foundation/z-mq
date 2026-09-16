@@ -1,0 +1,38 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Test
+*.log
+test-output/
+test-outputs/
+coverage/
+
+# Misc
+*.bak
+*.tmp
+*.swp
+*~
+# Maven Central 发布凭证 (z-mq)
+.env
+.gnupg/
+
+# ===== Git 本地备份目录 (历史塌缩用) =====
+.git.bak.*/
