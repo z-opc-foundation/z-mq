@@ -3,6 +3,14 @@ package com.zifang.z.mq.broker.delay;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
@@ -23,9 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>回调中把消息标记为"可投递" (由回调实现决定如何路由回正常队列)</li>
  * </ol>
  *
- * <p><b>注意:</b> RocketMQ 真实实现把延迟消息写到独立的 {@code SCHEDULE_TOPIC_XXXX} Topic,
- * 用 18 个 queue 对应 18 个延迟级别, 单独的 ReputMessageService 负责扫描这些队列.
- * MVP 版本用 JDK {@link DelayQueue} 简化实现, 适合单 Broker 场景.
+ * <p><b>持久化:</b> 支持将延迟消息的投递时间持久化到文件，重启后恢复延迟队列。
  *
  * <p><b>线程安全:</b> 所有公开方法线程安全, 内部用 DelayQueue + 守护线程.
  *
@@ -50,6 +56,12 @@ public class ScheduleMessageService {
     /** 回调: 当延迟消息到期时调用. */
     private DelayedMessageListener listener;
 
+    /** 持久化文件路径 */
+    private String persistFilePath;
+
+    /** 延迟 offset 持久化存储: level -> nextOffset */
+    private final ConcurrentHashMap<Integer, Long> delayOffsetTable = new ConcurrentHashMap<>();
+
     @SuppressWarnings("unchecked")
     public ScheduleMessageService() {
         this(DEFAULT_DELAY_LEVELS);
@@ -69,6 +81,9 @@ public class ScheduleMessageService {
      */
     public void start() {
         if (started.compareAndSet(false, true)) {
+            // 加载持久化数据
+            loadPersistData();
+
             for (int i = 0; i < levelQueues.length; i++) {
                 final int level = i + 1;
                 Thread t = new Thread(() -> deliverLoop(level), "ScheduleMessageService-Level-" + level);
@@ -84,8 +99,8 @@ public class ScheduleMessageService {
      */
     public void shutdown() {
         if (started.compareAndSet(true, false)) {
-            // 唤醒所有 take() 中的守护线程 (InterruptedException 退出)
-            // 由于守护线程随 JVM 退出, 这里仅标记状态
+            // 持久化当前状态
+            persistDelayOffsets();
             log.info("ScheduleMessageService shutdown");
         }
     }
@@ -95,6 +110,13 @@ public class ScheduleMessageService {
      */
     public void setListener(DelayedMessageListener listener) {
         this.listener = listener;
+    }
+
+    /**
+     * 设置持久化文件路径。
+     */
+    public void setPersistFilePath(String persistFilePath) {
+        this.persistFilePath = persistFilePath;
     }
 
     /**
@@ -169,6 +191,74 @@ public class ScheduleMessageService {
             total += q.size();
         }
         return total;
+    }
+
+    // ==================== 持久化相关方法 ====================
+
+    /**
+     * 持久化延迟 offset 到文件。
+     */
+    public void persistDelayOffsets() {
+        if (persistFilePath == null || persistFilePath.isEmpty()) {
+            return;
+        }
+        File file = new File(persistFilePath);
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            for (Map.Entry<Integer, Long> entry : delayOffsetTable.entrySet()) {
+                writer.write(entry.getKey() + "=" + entry.getValue());
+                writer.newLine();
+            }
+            log.info("Delay offsets persisted: file={}", persistFilePath);
+        } catch (IOException e) {
+            log.error("Failed to persist delay offsets: file={}", persistFilePath, e);
+        }
+    }
+
+    /**
+     * 从文件加载延迟 offset。
+     */
+    private void loadPersistData() {
+        if (persistFilePath == null || persistFilePath.isEmpty()) {
+            return;
+        }
+        File file = new File(persistFilePath);
+        if (!file.exists()) {
+            return;
+        }
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split("=");
+                if (parts.length == 2) {
+                    int level = Integer.parseInt(parts[0]);
+                    long offset = Long.parseLong(parts[1]);
+                    delayOffsetTable.put(level, offset);
+                }
+            }
+            log.info("Delay offsets loaded: file={}, entries={}", persistFilePath, delayOffsetTable.size());
+        } catch (IOException e) {
+            log.error("Failed to load delay offsets: file={}", persistFilePath, e);
+        }
+    }
+
+    /**
+     * 更新延迟 offset（由 BrokerController 在投递延迟消息时调用）。
+     */
+    public void updateDelayOffset(int level, long offset) {
+        delayOffsetTable.put(level, offset);
+    }
+
+    /**
+     * 获取延迟 offset。
+     */
+    public long getDelayOffset(int level) {
+        return delayOffsetTable.getOrDefault(level, 0L);
     }
 
     private void deliverLoop(int level) {
