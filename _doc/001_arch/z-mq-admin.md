@@ -30,7 +30,7 @@
 ## 项目结构
 
 ```
-z-mq-console/
+z-mq-admin/
 ├── package.json             # 依赖与脚本
 ├── vite.config.ts           # Vite 配置 (含 /api proxy)
 ├── tsconfig.json            # TypeScript 主配置
@@ -61,7 +61,7 @@ z-mq-console/
 ### 安装依赖
 
 ```bash
-cd z-mq-console
+cd z-mq-admin
 npm install   # 或 pnpm install / yarn
 ```
 
@@ -170,7 +170,7 @@ EXPOSE 8081
 
 ```
 ┌─────────────────┐       ┌─────────────────────┐
-│   z-mq-console  │       │  z-mq-broker-admin  │
+│   z-mq-admin  │       │  z-mq-broker-admin  │
 │   (Vue 3)       │ ─────▶│  (REST API :9090)   │
 │   port 8081     │  /api │                     │
 └─────────────────┘       └─────────────────────┘
@@ -195,6 +195,6 @@ EXPOSE 8081
 
 ## 维护
 
-- 模块维护人: z-mq-console 团队
+- 模块维护人: z-mq-admin 团队
 - 反馈渠道: GitLab Issues
 - 文档: 本 README + 代码内注释

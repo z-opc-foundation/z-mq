@@ -259,7 +259,7 @@ z-mq/
 ├── z-mq-client/                     # Producer + Push/Pull Consumer
 ├── z-mq-spring-boot-starter/        # Spring Boot 自动装配
 ├── z-mq-tools/                      # 命令行运维工具
-├── z-mq-console/                    # React + AntD 可视化控制台
+├── z-mq-admin/                    # React + AntD 可视化控制台
 ├── docker-compose.yml               # 一键起 nameserver + broker
 └── README.md
 ```
@@ -329,7 +329,7 @@ services:
     volumes: ["./data/broker:/data/z-mq/broker"
 
   console:
-    image: ghcr.io/z-opc-foundation/z-mq-console:1.0.2
+    image: ghcr.io/z-opc-foundation/z-mq-admin:1.0.2
     ports: ["8080:8080"]
     depends_on: [namesrv]
 ```
