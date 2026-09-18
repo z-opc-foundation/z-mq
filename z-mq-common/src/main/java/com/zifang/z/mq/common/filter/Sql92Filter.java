@@ -544,7 +544,7 @@ public class Sql92Filter implements MessageFilter {
         private final Object value;
         private final Type type;
 
-        static final SqlValue NULL = new SqlValue(null, Type.NULL);
+        static final SqlValue NULL = new SqlValue((String) null, Type.NULL);
 
         SqlValue(String value, Type type) {
             this.value = value;

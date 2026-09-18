@@ -88,7 +88,12 @@ public class TraceService {
             t.setDaemon(true);
             return t;
         });
-        this.scheduler.scheduleWithFixedRate(this::flush, flushIntervalMillis, flushIntervalMillis, TimeUnit.MILLISECONDS);
+        this.scheduler.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                flush();
+            }
+        }, flushIntervalMillis, flushIntervalMillis, TimeUnit.MILLISECONDS);
         log.info("TraceService started: batchSize={}, flushInterval={}ms", batchSize, flushIntervalMillis);
     }
 

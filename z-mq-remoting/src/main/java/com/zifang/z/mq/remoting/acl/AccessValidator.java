@@ -1,4 +1,4 @@
-package com.zifang.z.mq.common.acl;
+package com.zifang.z.mq.remoting.acl;
 
 import com.zifang.z.mq.common.message.Message;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;

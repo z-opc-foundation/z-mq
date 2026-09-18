@@ -63,7 +63,7 @@ public class TransactionCheckService {
             return t;
         });
         this.running = true;
-        this.checkExecutor.scheduleWithFixedRate(this::doCheck, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
+        this.checkExecutor.scheduleAtFixedRate(this::doCheck, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
         log.info("TransactionCheckService started: interval={}ms", intervalMillis);
     }
 

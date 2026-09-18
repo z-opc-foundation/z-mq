@@ -40,12 +40,17 @@ public class DefaultMQProducer {
     private long sendMsgTimeoutMillis = 3000;
     private int defaultTopicQueueNums = 4;
 
-    private MQClientInstance mqClientInstance;
+    protected MQClientInstance mqClientInstance;
     private final ConcurrentHashMap<String, MQClientInstance> instanceTable = new ConcurrentHashMap<>();
     private final AtomicLong msgIdGenerator = new AtomicLong(0);
 
     public DefaultMQProducer(String producerGroup) {
         this.producerGroup = producerGroup;
+    }
+
+    public DefaultMQProducer(String producerGroup, NettyClientConfig nettyClientConfig) {
+        this.producerGroup = producerGroup;
+        this.nettyClientConfig = nettyClientConfig;
     }
 
     public void start() throws Exception {

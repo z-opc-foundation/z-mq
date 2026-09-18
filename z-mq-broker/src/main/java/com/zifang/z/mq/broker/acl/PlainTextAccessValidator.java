@@ -1,6 +1,6 @@
 package com.zifang.z.mq.broker.acl;
 
-import com.zifang.z.mq.common.acl.AccessValidator;
+import com.zifang.z.mq.remoting.acl.AccessValidator;
 import com.zifang.z.mq.common.message.Message;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
