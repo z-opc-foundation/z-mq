@@ -7,10 +7,10 @@
     <parent>
         <groupId>io.github.yuku123</groupId>
         <artifactId>z-mq</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
     </parent>
     <groupId>io.github.yuku123</groupId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 
     <artifactId>z-mq-client</artifactId>
     <packaging>jar</packaging>
@@ -50,12 +50,12 @@
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-remoting</artifactId>
-            <version>1.1.0</version>
+            <version>1.2.0</version>
         </dependency>
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-common</artifactId>
-            <version>1.1.0</version>
+            <version>1.2.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>

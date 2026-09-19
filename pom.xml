@@ -15,7 +15,7 @@
          显式覆盖 parent 的 com.zifang，保留 parent 仅用于继承 monorepo 本地构建链 -->
     <groupId>io.github.yuku123</groupId>
     <artifactId>z-mq</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <packaging>pom</packaging>
 
     <name>z-mq</name>
@@ -260,8 +260,8 @@
         <profile>
             <id>central</id>
             <properties>
-                <!-- true 跳过 javadoc（用于本地 dry-run）；真发 Central 时改为 false -->
-                <maven.javadoc.skip>true</maven.javadoc.skip>
+                <!-- true 跳过 javadoc（仅用于本地 dry-run）；真发 Central 必须 false（Central 强制要求 javadoc.jar） -->
+                <maven.javadoc.skip>false</maven.javadoc.skip>
                 <!-- true 跳过 GPG 签名（用于本地 dry-run）；真发 Central 时改为 false -->
                 <central.gpg.skip>false</central.gpg.skip>
             </properties>
