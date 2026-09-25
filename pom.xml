@@ -70,7 +70,9 @@
         <!-- Dependency Versions -->
         <netty.version>4.1.108.Final</netty.version>
         <spring-boot.version>2.7.18</spring-boot.version>
+        <jackson-bom.version>2.18.6</jackson-bom.version>
         <slf4j.version>2.0.12</slf4j.version>
+        <log4j2.version>2.25.4</log4j2.version>
         <logback.version>1.5.34</logback.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <guava.version>33.6.0-jre</guava.version>
@@ -131,6 +133,55 @@
                 <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-tools</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Log4j2 BOM —— 必须排在 spring-boot-dependencies 之前。
+                 import 进来的 BOM 无法用 property 覆盖，而 boot 2.7.18 把 log4j2 钉在 2.17.2：
+                 模块只用 log4j-api 2.25.4、传递进来的 log4j-core 却被压到 2.17.2，
+                 两者一撞就是 NoSuchMethodError: LoaderUtil.getClassLoaders()（类初始化即失败，整套件跑不进 JVM）。 -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-bom</artifactId>
+                <version>${log4j2.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Jackson BOM —— 同样必须排在 spring-boot-dependencies 之前。
+                 不钉它时 core/annotations 由谁决定要看父 pom：250 上 8 月那份 z-opc 父 pom 零条 jackson 声明，
+                 core 被 Boot 压到 2.13.5 而 databind 仍是模块自钉的 2.18.6，
+                 结果 NoSuchMethodError: BufferRecycler.releaseToPool()（z-mq-common 8 例全红）。
+                 import BOM 后三件套一起出 2.18.6，模块里的显式 <version> 也就没必要再留。 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson-bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Netty BOM —— 必须排在 spring-boot-dependencies 之前：实测把 import 放在 Boot 之后会输，
+                 同一个 pom 里先声明的 import 才赢（下面是量出来的结论，不是推测）。
+                 只钉 io.netty:netty-all 也不够：netty-all 4.1.108 的 jar 实测 4516 字节、0 个 class，
+                 真正的类全在它带的 30 个分件里，而分件被 Boot 2.7.18 改写成 4.1.101 ——
+                 即"升到 4.1.108"从未生效，101→108 之间的修复一个没拿到。 -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- JUnit BOM —— 同样必须排在 spring-boot-dependencies 之前。
+                 junit-jupiter 聚合壳钉 5.10.2 而 jupiter-api/engine/params 被 Boot 压到 5.8.2，
+                 实际跑的始终是 5.8.2（dependency:tree 里 5.10.2 的 api 一个都不存在）。 -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Spring Boot BOM -->
@@ -201,6 +252,17 @@
         </dependencies>
     </dependencyManagement>
 
+    <dependencies>
+        <!-- 全模块测试期共用的 log4j2 绑定。
+             主码只用 log4j-api（不打绑定进构件，绑定归下游应用），但 49 个主源文件在 <clinit> 里
+             LogManager.getLogger(...) —— 测试没有 core 就是整类 NoClassDefFoundError，不是少打日志。 -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <pluginManagement>
             <plugins>
@@ -223,6 +285,12 @@
                     <configuration>
                         <argLine>-Xmx1024m -XX:MaxMetaspaceSize=256m</argLine>
                         <trimStackTrace>false</trimStackTrace>
+                        <!-- 挂钟阈值断言（"10 us/op 以内"）不做默认门禁：同一份代码两次跑一次红一次绿，
+                             而它一红就让整个 reactor 从第 2 个模块起中断，后面 6 个模块的测试根本不执行。
+                             要看吞吐用 `mvn test -Pperf` 显式跑。 -->
+                        <excludes>
+                            <exclude>**/*BenchmarkTest.java</exclude>
+                        </excludes>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -257,6 +325,21 @@
     </build>
 
     <profiles>
+        <!-- 吞吐/挂钟基准：只在显式 `-Pperf` 时跑（默认被 surefire 的 excludes 挡在门禁外） -->
+        <profile>
+            <id>perf</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludes combine.self="override"/>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>central</id>
             <properties>
