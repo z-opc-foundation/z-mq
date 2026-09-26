@@ -123,7 +123,8 @@ public class MQClientInstance {
     /**
      * 真实从 NameServer 拉取 Topic 路由.
      */
-    private TopicRouteData fetchTopicRouteDataFromNameServer(String topic) {        if (namesrvAddr == null || namesrvAddr.isEmpty()) {
+    private TopicRouteData fetchTopicRouteDataFromNameServer(String topic) {
+        if (namesrvAddr == null || namesrvAddr.isEmpty()) {
             log.warn("No name server address configured");
             return null;
         }
@@ -238,7 +239,10 @@ public class MQClientInstance {
      * 所以"换了机器"是构造保证的，不是摇出来的。
      *
      * @param excludedBrokerNames 上一趟已经试过而失败的 brokerName；{@code null}/空 时与不排除等价
-     * @return 候选被排光时返回 {@code null}（调用方据此决定是重取路由还是就地失败）
+     * @return 候选被排光时返回 {@code null}，本入口绝不悄悄回到某一台。口径与调用方约定一致：
+     *         拿到 {@code null} 的组包那一步会把排除表放下、在同一份路由里再选一次，
+     *         于是<b>回落那一趟真发一次 RPC</b>（换无可换不等于提前收工）；
+     *         只有回落之后仍然选不出队列，组包才抛"无可写队列"
      */
     public MessageQueue selectOneMessageQueue(String topic, TopicRouteData routeData,
                                               Collection<String> excludedBrokerNames) {

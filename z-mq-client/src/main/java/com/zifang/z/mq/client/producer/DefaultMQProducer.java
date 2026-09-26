@@ -126,7 +126,9 @@ public class DefaultMQProducer {
      * (broker 侧回投时就没有原始 topic 可用了).
      * <p>
      * <b>这一条走带白名单的重试循环</b>：每一趟失败都先拿 {@link SendRetryPolicy} 那张表下判决，
-     * 判到"可以重试"才进下一趟，并且下一趟一定换一台 broker（或先重取路由）。
+     * 判到"可以重试"才进下一趟，下一趟优先换一台 broker（或先重取路由）；路由里已没有没试过的机器时
+     * 回落到同一台把剩下的预算试满 —— 回落那一趟真发一次 RPC，口径见
+     * {@link #prepareSend(MQClientInstance, Message, int, TopicRouteData, java.util.Collection)}。
      * 事务的半消息走 {@link #prepareMessageSend} + {@link #executePreparedSend} 那两个出口，
      * 一次一趟、不进这条循环 —— 半消息的二次确认必须发回写它的那一台，换机器就是把结论发丢了。
      */
@@ -138,7 +140,10 @@ public class DefaultMQProducer {
         } catch (Exception precheckFailure) {
             SendRetryPolicy.Rule rule = sendRetryPolicy.explain(precheckFailure, SendRetryPolicy.Phase.PRECHECK);
             if (willRetry(rule, 1, sendRetryPolicy.attemptBudget(retryTimesWhenSendFailed))) {
-                throw new IllegalStateException("unreachable: precheck failures are never retried");
+                // 只说这一支自己的事实：前置校验失败时既没有 instance 也没有队列，"再来一趟"无从下手。
+                // 这一档到底重不重试仍由那张表说了算 —— 它判成可重试时这里就是缺陷，而不是死代码。
+                throw new IllegalStateException("pre-check failure was judged retryable by the whitelist table ("
+                        + rule + "), but nothing has been prepared yet to retry on", precheckFailure);
             }
             throw precheckFailure;
         }
@@ -447,7 +452,8 @@ public class DefaultMQProducer {
         if (mq == null && excludedBrokerNames != null && !excludedBrokerNames.isEmpty()) {
             // 走到这里说明这份路由里的每一台都被这一条消息试过了 —— 换无可换。
             // 这是"排除表用完了"这件记账事实，不是"路由没解析出来"，所以不去刷路由，
-            // 而是把剩下那一趟预算花在同一个地址上（口径与"重试次数含不含首次"一样是定死的）。
+            // 而是把剩下那一趟预算花在同一个地址上：回落那一趟真发一次 RPC，
+            // 绝不提前收工（口径与"重试次数含不含首次"一样是定死的）。
             log.warn("topic {} has no broker left to fail over to (tried={}), reusing the route as is",
                     topic, excludedBrokerNames);
             mq = instance.selectOneMessageQueue(topic, routeData, null);

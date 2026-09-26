@@ -9,6 +9,9 @@ import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -108,6 +111,122 @@ public class SendRetryPolicyTableTest {
                         SendRetryPolicy.Phase.PRECHECK));
         assertEquals(SendRetryPolicy.StoreOutcome.NOT_SENT,
                 closed.ruleFor(SendRetryPolicy.Tier.MESSAGE_INVALID).getStoreOutcome());
+    }
+
+    /**
+     * 「前置校验那一档不参与重试」这句话只由这张表说：三条判据在这里钉死，
+     * 生产代码里那句"这一支不会重试"的卫兵因此是<b>结构上进不来</b>的，而不是一句复述。
+     * <ol>
+     *   <li>表里所有 {@code phase == PRECHECK} 的行，两种开关下都必须是 {@code NEVER_RETRY}，
+     *       且这样的行恰好两行；认不出来的形状落到的兜底行同样禁重试；</li>
+     *   <li>判据在 PRECHECK 阶段对一根形状任意的输入（含被层层包装的、含 {@code null}）都禁重试；</li>
+     *   <li><b>没有换表的缝</b>：策略类不可继承、公开构造器为 0、{@link SendRetryPolicy#rules()}
+     *       返回不可变列表、行对象没有 setter，所以调用方无法把 PRECHECK 档判成可重试 ——
+     *       这一条才是"结构上进不来"的判据本身，前两条只是它的结果。</li>
+     * </ol>
+     */
+    @Test
+    @DisplayName("★ 前置校验那一档：可构造出来的每一张表都判禁重试，且没有换表的缝 ⇒ 卫兵那一支不可达")
+    public void noObtainablePolicyMakesAPrecheckFailureRetryable() throws Exception {
+        // 判据一：表里挂在 PRECHECK 阶段下的行，两种开关落成的判决都是禁
+        int precheckRows = 0;
+        for (SendRetryPolicy.Rule rule : closed.rules()) {
+            if (rule.getPhase() == SendRetryPolicy.Phase.PRECHECK) {
+                precheckRows++;
+                assertSame(SendRetryPolicy.Decision.NEVER_RETRY, rule.getDecision().resolve(false),
+                        "PRECHECK 档被放开了一半（开关关着）: " + rule);
+                assertSame(SendRetryPolicy.Decision.NEVER_RETRY, rule.getDecision().resolve(true),
+                        "PRECHECK 档被 at-least-once 那个开关放开了: " + rule);
+            }
+        }
+        assertEquals(2, precheckRows, "点名的前置校验档位必须恰好两行（不合法 / 未 start）: "
+                + closed.rules());
+        assertSame(SendRetryPolicy.Decision.NEVER_RETRY,
+                closed.ruleFor(SendRetryPolicy.Tier.UNRECOGNISED).getDecision(),
+                "PRECHECK 阶段认不出的形状全靠兜底行，兜底行放开等于这一档放开");
+
+        // 判据二：合成一批形状任意的输入，PRECHECK 阶段两个开关下都必须禁
+        Throwable[] shapes = new Throwable[]{
+                new IllegalArgumentException("topic is null or empty"),
+                new IllegalStateException("producer not started"),
+                new RuntimeException("something else entirely"),
+                new InterruptedException("instance start interrupted"),
+                new RemotingSendRequestException("No route for topic: T"),
+                new RemotingConnectException("127.0.0.1:1"),
+                new RemotingTimeoutException("timeout"),
+                new RemotingTooMuchRequestException("flow control"),
+                new IllegalStateException("wrapped", new IllegalArgumentException("inner")),
+                new RuntimeException("twice wrapped",
+                        new IllegalStateException("outer", new RemotingConnectException("inner"))),
+                null
+        };
+        for (int i = 0; i < shapes.length; i++) {
+            assertSame(SendRetryPolicy.Decision.NEVER_RETRY,
+                    closed.decide(shapes[i], SendRetryPolicy.Phase.PRECHECK),
+                    "形状 #" + i + " 在 PRECHECK 阶段被判成可重试: " + shapes[i]);
+            assertSame(SendRetryPolicy.Decision.NEVER_RETRY,
+                    open.decide(shapes[i], SendRetryPolicy.Phase.PRECHECK),
+                    "形状 #" + i +  " 在开关打开后被判成可重试: " + shapes[i]);
+        }
+
+        // 判据三：换表的缝一处都不许存在（否则前两条只是"默认表恰好如此"，那句卫兵就成了可达）
+        assertTrue(Modifier.isFinal(SendRetryPolicy.class.getModifiers()),
+                "策略类可被继承 ⇒ 子类就能改写判决");
+        assertEquals(0, SendRetryPolicy.class.getConstructors().length,
+                "公开构造器必须为 0：否则调用方能拿到一个不经工厂的策略实例");
+        int factories = 0;
+        List<SendRetryPolicy> obtainable = new ArrayList<SendRetryPolicy>();
+        for (Method m : SendRetryPolicy.class.getDeclaredMethods()) {
+            if (!Modifier.isStatic(m.getModifiers()) || m.getReturnType() != SendRetryPolicy.class) {
+                continue;
+            }
+            factories++;
+            for (Object[] args : argumentShapesOf(m)) {
+                obtainable.add((SendRetryPolicy) m.invoke(null, args));
+            }
+        }
+        assertEquals(3, factories, "工厂方法数量（defaults / allowingUnknownOutcomeRetries / of）: "
+                + factories);
+        assertTrue(obtainable.size() >= 3, "可构造出的策略实例少于 3 份，说明扫错了: " + obtainable.size());
+        for (SendRetryPolicy policy : obtainable) {
+            assertSame(SendRetryPolicy.Decision.NEVER_RETRY,
+                    policy.decide(new IllegalStateException("producer not started"),
+                            SendRetryPolicy.Phase.PRECHECK),
+                    "这一份策略实例会把前置校验失败判成可重试: " + policy.getClass());
+        }
+
+        List<SendRetryPolicy.Rule> rules = closed.rules();
+        try {
+            rules.add(closed.ruleFor(SendRetryPolicy.Tier.UNRECOGNISED));
+            fail("rules() 返回的表可被追加 ⇒ 调用方能往表里加一行可重试的前置校验档");
+        } catch (UnsupportedOperationException expected) {
+            assertNotNull(expected);
+        }
+        for (Method m : SendRetryPolicy.Rule.class.getMethods()) {
+            assertFalse(m.getName().startsWith("set"),
+                    "行对象暴露了 setter，表就能被就地改掉: " + m);
+        }
+    }
+
+    /** 一个工厂方法的合法入参形状；无参工厂返回一份空数组的数组. */
+    private static List<Object[]> argumentShapesOf(Method m) {
+        List<Object[]> out = new ArrayList<Object[]>();
+        if (m.getParameterTypes().length == 0) {
+            out.add(new Object[0]);
+            return out;
+        }
+        if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == boolean.class) {
+            out.add(new Object[]{Boolean.FALSE});
+            out.add(new Object[]{Boolean.TRUE});
+            return out;
+        }
+        if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == int.class) {
+            out.add(new Object[]{Integer.valueOf(0)});
+            out.add(new Object[]{Integer.valueOf(3)});
+            return out;
+        }
+        fail("工厂方法 " + m + " 的入参形状没被覆盖，判据三扫不全");
+        return out;
     }
 
     @Test

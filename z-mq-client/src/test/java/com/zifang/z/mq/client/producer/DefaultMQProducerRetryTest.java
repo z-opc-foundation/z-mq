@@ -147,15 +147,18 @@ public class DefaultMQProducerRetryTest {
     }
 
     @Test
-    @DisplayName("第 2 档（producer 没 start）：当场抛，不进循环")
+    @DisplayName("第 2 档（producer 没 start）：当场抛，不进循环；抛的就是那句原始结论而不是卫兵的自证")
     public void notStartedProducerIsNotRetried() throws Exception {
         DefaultMQProducer cold = new DefaultMQProducer("ColdGroup", new NettyClientConfig());
         cold.setNamesrvAddr("127.0.0.1:9876");
+        IllegalStateException thrown;
         try {
-            assertThrows(IllegalStateException.class, () -> cold.send(message()));
+            thrown = assertThrows(IllegalStateException.class, () -> cold.send(message()));
         } finally {
             cold.shutdown();
         }
+        assertEquals("producer not started", thrown.getMessage(),
+                "交回调用方的必须是那条前置校验本身的结论；换成别处的句子就说明判决被搬进了生产代码");
         assertEquals(0, instance.invokes);
         assertEquals(0L, producer.getSendRetryCount());
     }
@@ -240,16 +243,20 @@ public class DefaultMQProducerRetryTest {
     }
 
     @Test
-    @DisplayName("第 4 档的下限：路由里只剩一台时，换不了机器也要把预算试满（口径写在表上，不是摇出来的）")
+    @DisplayName("第 4 档的下限：路由里只剩一台时换无可换 ⇒ 回落到同一台，回落那一趟真发一次 RPC、把预算试满")
     public void singleBrokerRouteStillExhaustsTheBudget() throws Exception {
         instance.route(route(1, 1));
         instance.throwEachInvoke(connect("只有一台，而这台连不上"));
 
         assertThrows(RemotingConnectException.class, () -> producer.send(message()));
 
-        assertEquals(4, instance.invokes, "换不了机器不等于不必重试: " + instance.describe());
-        assertEquals(1, new HashSet<String>(instance.invokedAddrs).size());
+        assertEquals(4, instance.invokes,
+                "★ 换无可换不等于提前收工：回落那一趟必须真发一次 RPC（预算 4 趟 ⇒ 出口 4 次）: "
+                        + instance.describe());
+        assertEquals(1, new HashSet<String>(instance.invokedAddrs).size(),
+                "回落用的就是同一台，不是又摇出一台没试过的");
         assertEquals(3L, producer.getSendRetryCount());
+        assertEquals(0, instance.routeRefreshes, "排除表用尽是记账事实，不是路由没解析出来 ⇒ 不该去刷路由");
     }
 
     // ==================== 第 5/6 档：默认禁，显式开 ====================
