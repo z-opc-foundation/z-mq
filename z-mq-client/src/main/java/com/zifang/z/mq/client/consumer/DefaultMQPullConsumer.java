@@ -79,7 +79,14 @@ public class DefaultMQPullConsumer {
 
     private MQClientInstance mqClientInstance;
     private final ConcurrentHashMap<String, MQClientInstance> instanceTable = new ConcurrentHashMap<>();
-    /** 队列 offset 表 (Memory-local). */
+    /**
+     * 队列位点的<b>本地缓存</b>：这里的数不再是位点的真相（真相在 broker 的
+     * {@code ConsumerOffsetManager}，按 {@code (topic, queueId, group)} 存盘、跨重启恢复）。
+     * <p>
+     * 写这张表只有两条路：{@link #updateOffset(MessageQueue, long)}（用户自己记）与
+     * {@link #commitOffset(MessageQueue, long)}（写穿到 broker）。只走前一条 ⇒ 位点出不了进程,
+     * 这正是本支要修的"广告了但没接线"。
+     */
     private final Map<MessageQueue, Long> offsetTable = new ConcurrentHashMap<>();
 
     public DefaultMQPullConsumer(String consumerGroup) {
@@ -129,6 +136,43 @@ public class DefaultMQPullConsumer {
      * @return 拉取结果（包含 nextOffset 与消息列表）
      */
     public PullResult pull(MessageQueue mq, long offset, int maxNums, long suspendBudgetMillis) throws Exception {
+        return pullInternal(mq, Long.valueOf(offset), maxNums, suspendBudgetMillis);
+    }
+
+    /**
+     * 同步拉取，<b>不带 offset</b>：起始位点由 broker 按 {@code (topic, queueId, 本消费组)} 的
+     * 已提交位点决定 —— 这才是"消费位点持久化, 跨重启恢复"那句广告的读侧。
+     * <p>
+     * 本组从没提交过位点时 broker 回落到 0（与接线前同一形状，不会抛）。
+     *
+     * @param mq      队列
+     * @param maxNums 最多拉多少条
+     * @return 拉取结果（{@code nextOffset} 即下一次该提交的位点）
+     */
+    public PullResult pullFromCommittedOffset(MessageQueue mq, int maxNums) throws Exception {
+        return pullInternal(mq, null, maxNums, 0L);
+    }
+
+    /**
+     * 同上，允许 Broker 端长轮询。
+     *
+     * @param mq                  队列
+     * @param maxNums             最多拉多少条
+     * @param suspendBudgetMillis 允许 Broker 挂起多久（毫秒）; {@code <= 0} 即短轮询
+     * @return 拉取结果
+     */
+    public PullResult pullFromCommittedOffset(MessageQueue mq, int maxNums, long suspendBudgetMillis)
+            throws Exception {
+        return pullInternal(mq, null, maxNums, suspendBudgetMillis);
+    }
+
+    /**
+     * @param offset 起始位点; {@code null} = <b>不发 offset 字段</b>, 让 broker 用已提交位点。
+     *               之所以用"字段缺席"而不是"发 -1"：-1 在请求里是一个合法-looking 的位点数,
+     *               一旦被 {@code Long.parseLong} 吃下去就会变成一个谁都没想要的起点。
+     */
+    private PullResult pullInternal(MessageQueue mq, Long offset, int maxNums, long suspendBudgetMillis)
+            throws Exception {
         if (mq == null) {
             throw new IllegalArgumentException("MessageQueue is null");
         }
@@ -148,8 +192,12 @@ public class DefaultMQPullConsumer {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PULL_MESSAGE);
         request.addExtField("topic", mq.getTopic());
         request.addExtField("queueId", String.valueOf(mq.getQueueId()));
-        request.addExtField("offset", String.valueOf(offset));
+        if (offset != null) {
+            request.addExtField("offset", String.valueOf(offset.longValue()));
+        }
         request.addExtField("maxNum", String.valueOf(maxNums));
+        // 消费组: broker 侧按 (topic, queueId, group) 解析已提交位点用; 显式带 offset 时它只是备查
+        request.addExtField(ConsumerOffsetRequests.EXT_CONSUMER_GROUP, consumerGroup);
         if (suspendBudgetMillis > 0) {
             // 只带预算的请求才会挂起
             request.addExtField(SUSPEND_TIMEOUT_FIELD, String.valueOf(suspendBudgetMillis));
@@ -157,15 +205,20 @@ public class DefaultMQPullConsumer {
 
         RemotingCommand response = mqClientInstance.invokeSync(brokerAddr, request,
                 pullRpcTimeoutMillis(suspendBudgetMillis));
+        // 失败路径上没有 broker 给的位点可用, 只能把请求里那个数（不带 offset 时是 -1, 表示"未知"）回给调用方
+        long fallbackOffset = offset == null ? -1L : offset.longValue();
         if (response == null) {
-            return new PullResult(PullStatus.CONNECTION_LOST, mq, offset, java.util.Collections.emptyList());
+            return new PullResult(PullStatus.CONNECTION_LOST, mq, fallbackOffset,
+                    java.util.Collections.emptyList());
         }
         if (response.getCode() != RemotingSysResponseCode.SUCCESS) {
-            return new PullResult(PullStatus.SYSTEM_ERROR, mq, offset, java.util.Collections.emptyList());
+            return new PullResult(PullStatus.SYSTEM_ERROR, mq, fallbackOffset,
+                    java.util.Collections.emptyList());
         }
         PullResultPayload payload = JsonCodec.decode(response.getBody(), PullResultPayload.class);
         if (payload == null) {
-            return new PullResult(PullStatus.NO_MATCHED_MSG, mq, offset, java.util.Collections.emptyList());
+            return new PullResult(PullStatus.NO_MATCHED_MSG, mq, fallbackOffset,
+                    java.util.Collections.emptyList());
         }
         long nextOffset = payload.getNextOffset();
         List<MessageExt> msgs = payload.getMessages();
@@ -177,7 +230,61 @@ public class DefaultMQPullConsumer {
     }
 
     /**
-     * 获取某队列当前 offset（本地缓存）。
+     * <b>显式提交消费位点</b>：把 {@code (topic, queueId, 本消费组) -> offset} 写给 broker，
+     * 由 broker 的 {@code ConsumerOffsetManager} 落盘（周期 flush + 关机 flush），从而跨重启恢复。
+     * <p>
+     * 提交的是"下次该从哪儿开始读"，即已消费的最后一条的 queueOffset + 1 —— 与
+     * {@code PullResult.getNextOffset()} 同一个口径。
+     * <p>
+     * broker 没答应就抛（不静默）：提交失败的后果是重启后整队重放，比当场响更糟。
+     *
+     * @param mq     队列
+     * @param offset 下次消费的起始位点
+     * @return broker 侧记下的位点（响应里回读的那个值）
+     */
+    public long commitOffset(MessageQueue mq, long offset) throws Exception {
+        if (mq == null) {
+            throw new IllegalArgumentException("MessageQueue is null");
+        }
+        if (mqClientInstance == null) {
+            throw new IllegalStateException("consumer not started");
+        }
+        return commitOffsetToBroker(resolveBrokerAddr(mq), mq, offset);
+    }
+
+    /**
+     * 同一个提交，但直接指定 broker 地址（不走路由）。
+     * <p>
+     * 存在的理由：单 broker / 运维脚本 / 测试手里往往只有 {@code host:port}，没有 nameserver 也不该
+     * 因此丢位点。{@link #commitOffset(MessageQueue, long)} 就是解析完地址后调它。
+     */
+    public long commitOffsetToBroker(String brokerAddr, MessageQueue mq, long offset) throws Exception {
+        if (mqClientInstance == null) {
+            throw new IllegalStateException("consumer not started");
+        }
+        long stored = ConsumerOffsetRequests.sendOffsetCommit(mqClientInstance, brokerAddr,
+                mq.getTopic(), mq.getQueueId(), consumerGroup, offset);
+        offsetTable.put(mq, Long.valueOf(stored));
+        return stored;
+    }
+
+    private String resolveBrokerAddr(MessageQueue mq) throws RemotingSendRequestException {
+        TopicRouteData routeData = mqClientInstance.getTopicRouteData(mq.getTopic());
+        if (routeData == null) {
+            throw new RemotingSendRequestException("No route for topic: " + mq.getTopic());
+        }
+        String brokerAddr = lookupBrokerAddr(routeData, mq.getBrokerName());
+        if (brokerAddr == null) {
+            throw new RemotingSendRequestException("No broker addr for: " + mq.getBrokerName());
+        }
+        return brokerAddr;
+    }
+
+    /**
+     * 取本地缓存里的位点（<b>不是</b> broker 上的真相；没提交过就一直是一次本地读）。
+     * <p>
+     * 想要"重启后接着上次的位置读"，用 {@link #pullFromCommittedOffset(MessageQueue, int)}：
+     * 那条路把 key 交给 broker 去解，进程内这张表不再是唯一真相。
      */
     public long getOffset(MessageQueue mq) {
         Long off = offsetTable.get(mq);
@@ -185,7 +292,9 @@ public class DefaultMQPullConsumer {
     }
 
     /**
-     * 保存 offset（用户主动 ack）。
+     * 只改本地缓存，<b>不碰 broker</b>。要让它出得了这个进程，必须再调
+     * {@link #commitOffset(MessageQueue, long)}（或直接用 {@link #pullFromCommittedOffset(MessageQueue, int)}
+     * 让 broker 决定起点）。
      */
     public void updateOffset(MessageQueue mq, long offset) {
         offsetTable.put(mq, offset);

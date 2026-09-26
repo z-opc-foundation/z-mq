@@ -3,6 +3,7 @@ package com.zifang.z.mq.broker;
 import com.zifang.z.mq.broker.delay.ScheduleMessageService;
 import com.zifang.z.mq.broker.longpoll.PullRequestHoldService;
 import com.zifang.z.mq.broker.processor.AdminBrokerProcessor;
+import com.zifang.z.mq.broker.processor.ConsumerOffsetProcessor;
 import com.zifang.z.mq.broker.processor.PullMessageProcessor;
 import com.zifang.z.mq.broker.processor.SendMessageProcessor;
 import com.zifang.z.mq.common.RegisterBrokerResult;
@@ -83,11 +84,15 @@ public class BrokerController {
 
     private SendMessageProcessor sendMessageProcessor;
     private PullMessageProcessor pullMessageProcessor;
+    private ConsumerOffsetProcessor consumerOffsetProcessor;
 
     /**
      * v2 增强组件:
      * <ul>
-     *   <li>consumerOffsetManager: 消费位点持久化, 跨重启恢复</li>
+     *   <li>consumerOffsetManager: 消费位点持久化, 跨重启恢复。两条边都在 src/main 里:
+     *       提交边 = UPDATE_CONSUMER_OFFSET(220) 挂到 ConsumerOffsetProcessor.handleUpdateConsumerOffset,
+     *       读取边 = PullMessageProcessor.resolveStartOffset 在请求不带 offset 时按 consumerGroup 回读
+     *       queryOffset; 端到端验收见 ConsumerOffsetRestartE2ETest</li>
      *   <li>pullRequestHoldService: Pull 长轮询, 新消息毫秒级响应</li>
      *   <li>scheduleMessageService: 18 级内置延迟消息</li>
      * </ul>
@@ -211,6 +216,17 @@ public class BrokerController {
         this.pullMessageProcessor = new PullMessageProcessor(this);
         this.remotingServer.registerProcessor(
                 RequestCode.PULL_MESSAGE, this.pullMessageProcessor, this.pullMessageExecutor);
+
+        // 消费位点提交处理器 (UPDATE_CONSUMER_OFFSET → 下面已经 start 着的那个 consumerOffsetManager)
+        //
+        // 为什么挂 adminBrokerExecutor 而不是 pullMessageExecutor: 位点提交是消费组的【控制面】,
+        // 而 pull 池 (brokerConfig.pullMessageThreadPoolNums=16) 会被长轮询整批占住
+        // —— 一次挂起最长 MAX_SUSPEND_BUDGET_MILLIS=30s。把提交塞进那个队列, 就等于"消费位点要等
+        // 16 条挂住的 pull 让位才写得进去", 那是把控制面挂在数据面最坏的一段延迟后面。
+        // adminBrokerExecutor 是本仓既有的低频控制面池 (4 线程), 提交本身是一次内存写, 不需要新机制。
+        this.consumerOffsetProcessor = new ConsumerOffsetProcessor(this);
+        this.remotingServer.registerProcessor(
+                RequestCode.UPDATE_CONSUMER_OFFSET, this.consumerOffsetProcessor, this.adminBrokerExecutor);
 
         // 管理命令处理器（创建/查询 Topic）
         this.adminBrokerProcessor = new AdminBrokerProcessor(this);
@@ -457,6 +473,13 @@ public class BrokerController {
      */
     public ConsumerOffsetManager getConsumerOffsetManager() {
         return consumerOffsetManager;
+    }
+
+    /**
+     * @return 消费位点提交处理器（{@code UPDATE_CONSUMER_OFFSET} 的落点）
+     */
+    public ConsumerOffsetProcessor getConsumerOffsetProcessor() {
+        return consumerOffsetProcessor;
     }
 
     /**

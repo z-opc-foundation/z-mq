@@ -57,7 +57,14 @@ public class DefaultMQPushConsumer {
     private final ConcurrentHashMap<String, MQClientInstance> instanceTable = new ConcurrentHashMap<>();
     /** 订阅表 (topic -> 订阅信息). */
     private final ConcurrentHashMap<String, SubscriptionData> subscriptionTable = new ConcurrentHashMap<>();
-    /** 队列 offset 表. */
+    /**
+     * 队列位点的<b>本地缓存</b>，不再是位点的真相：真相在 broker 的 {@code ConsumerOffsetManager}
+     * 里，每次 listener 返回成功都由 {@link #commitOffsetThrough} 写穿过去（跨重启恢复的读侧是
+     * {@code PullMessageProcessor} 在请求不带 offset 时按 (topic, queueId, group) 回读）。
+     * <p>
+     * 表里<b>没有</b>某个队列 = "本进程还不知道该从哪儿读" ⇒ 首次拉取不发 offset 字段, 由 broker 按
+     * 已提交位点决定起点（接线前这里是 {@code computeIfAbsent(mq, k -> 0L)}, 也就是每个新进程都从 0 重放）。
+     */
     private final Map<MessageQueue, Long> offsetTable = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ScheduledExecutorService pullExecutor;
@@ -186,7 +193,9 @@ public class DefaultMQPushConsumer {
                     int qNums = findWriteQueueNums(routeData, bd.getBrokerName());
                     for (int q = 0; q < qNums; q++) {
                         MessageQueue mq = new MessageQueue(topic, bd.getBrokerName(), q);
-                        long offset = offsetTable.computeIfAbsent(mq, k -> 0L);
+                        // null = 本地还不知道起点 ⇒ 请求里不带 offset, 让 broker 用已提交位点。
+                        // 这里不再 computeIfAbsent(0L): 那等于每个新进程都把整个队列重放一遍。
+                        Long offset = offsetTable.get(mq);
                         try {
                             pullAndDispatch(brokerAddr, mq, offset, subData);
                         } catch (Exception ex) {
@@ -209,12 +218,17 @@ public class DefaultMQPushConsumer {
         return 1;
     }
 
-    private void pullAndDispatch(String brokerAddr, MessageQueue mq, long offset, SubscriptionData subData) throws Exception {
+    private void pullAndDispatch(String brokerAddr, MessageQueue mq, Long offset, SubscriptionData subData)
+            throws Exception {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PULL_MESSAGE);
         request.addExtField("topic", mq.getTopic());
         request.addExtField("queueId", String.valueOf(mq.getQueueId()));
-        request.addExtField("offset", String.valueOf(offset));
+        if (offset != null) {
+            request.addExtField("offset", String.valueOf(offset.longValue()));
+        }
         request.addExtField("maxNum", String.valueOf(pullBatchSize));
+        // 消费组必须随请求上去: 位点按 (topic, queueId, group) 存, 没有 group 就没有"按组恢复"的 key
+        request.addExtField(ConsumerOffsetRequests.EXT_CONSUMER_GROUP, consumerGroup);
 
         // 发送过滤参数到 Broker 端
         if (subData != null && subData.getFilterExpression() != null
@@ -257,7 +271,7 @@ public class DefaultMQPushConsumer {
             ConsumeConcurrentlyStatus status = ((MessageListener.Concurrently) listener).consumeMessage(
                     messages.toArray(new MessageExt[0]), ctx);
             if (status == ConsumeConcurrentlyStatus.CONSUME_SUCCESS) {
-                offsetTable.put(mq, payload.getNextOffset());
+                commitOffsetThrough(brokerAddr, mq, payload.getNextOffset());
             } else if (status == ConsumeConcurrentlyStatus.RECONSUME_LATER) {
                 // 消费失败，将消息加入重试队列
                 handleConsumeFailure(messages);
@@ -266,12 +280,35 @@ public class DefaultMQPushConsumer {
             ConsumeOrderlyStatus status = ((MessageListener.Orderly) listener).consumeMessage(
                     messages.toArray(new MessageExt[0]), ctx);
             if (status == ConsumeOrderlyStatus.SUCCESS) {
-                offsetTable.put(mq, payload.getNextOffset());
+                commitOffsetThrough(brokerAddr, mq, payload.getNextOffset());
             } else if (status == ConsumeOrderlyStatus.RECONSUME_LATER
                     || status == ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT) {
                 // 消费失败，将消息加入重试队列
                 handleConsumeFailure(messages);
             }
+        }
+    }
+
+    /**
+     * <b>提交点（写清楚并钉住）</b>：listener 对<b>这一批</b>明确回了成功之后，先更新本地缓存、
+     * 再立刻把 {@code payload.getNextOffset()} 写穿到 broker。
+     * <ul>
+     *   <li>为什么是"这一批的 nextOffset"而不是"最后一条的 queueOffset"：{@code nextOffset} 是
+     *       broker 给出的"下一条该读的位置"，与读侧 {@code queryOffset} 同一口径，差一就在这里出局。</li>
+     *   <li>为什么失败不提交：{@code RECONSUME_LATER} 走重试队列，位点停在上一批 ⇒ 未确认的消息会被重投，
+     *       这是 at-least-once 的既有语义，不许偷偷改掉。</li>
+     *   <li>提交失败只告警、不打断拉取循环：本地缓存已经推进，消息不会因此丢；
+     *       真正的保护是"下一次成功提交会带上更靠后的位点"。静默的代价记在日志里，不记在断言里。</li>
+     * </ul>
+     */
+    private void commitOffsetThrough(String brokerAddr, MessageQueue mq, long nextOffset) {
+        offsetTable.put(mq, Long.valueOf(nextOffset));
+        try {
+            ConsumerOffsetRequests.sendOffsetCommit(mqClientInstance, brokerAddr, mq.getTopic(),
+                    mq.getQueueId(), consumerGroup, nextOffset);
+        } catch (Exception e) {
+            log.warn("commit consumer offset failed: group={} mq={} offset={} err={}",
+                    consumerGroup, mq, nextOffset, e.getMessage());
         }
     }
 

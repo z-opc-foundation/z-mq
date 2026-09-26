@@ -13,6 +13,7 @@ import com.zifang.z.mq.remoting.netty.NettyRemotingAbstract;
 import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
+import com.zifang.z.mq.store.config.ConsumerOffsetManager;
 import com.zifang.z.mq.store.log.CommitLog;
 import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
@@ -55,6 +56,17 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
 
     /** 挂起表满 (suspendPull 返回 null) 时写进响应 remark 的话术 —— 必须是显式响应, 不许 NPE. */
     static final String REMARK_SUSPEND_TABLE_FULL = "suspend table full, returned current offset";
+
+    /**
+     * 请求里"消费组"的字段名 —— 线上契约，client 侧的同名字面量在
+     * {@code ConsumerOffsetRequests.EXT_CONSUMER_GROUP}（两侧由 ConsumerOffsetWiringGuardTest 钉住同一个值）。
+     * <p>
+     * 为什么 pull 请求必须带它：位点是按 {@code (topic, queueId, group)} 三元组存的
+     * （{@code ConsumerOffsetManager#makeKey}），请求里没有 group 就没有 key ⇒
+     * "没带 offset 就按已提交位点起读"这件事结构上做不到，只能退回 0。
+     * 提交侧（{@link ConsumerOffsetProcessor}）用的是同一个字段名。
+     */
+    public static final String EXT_CONSUMER_GROUP = "consumerGroup";
 
     /**
      * 响应里回写"这次 pull 是被什么放开的"的字段名。
@@ -107,7 +119,7 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         }
 
         int queueId = Integer.parseInt(queueIdStr);
-        long offset = offsetStr == null ? 0 : Long.parseLong(offsetStr);
+        long offset = resolveStartOffset(request, topic, queueId, offsetStr);
         int maxNum = maxNStr == null ? 32 : Integer.parseInt(maxNStr);
         // 挂起预算: 请求没带就是短轮询, 后面的分支一律不进入
         long suspendBudgetMillis = parseSuspendBudgetMillis(request.getExtField(EXT_SUSPEND_TIMEOUT_MILLIS));
@@ -235,6 +247,41 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         PullResultPayload body = new PullResultPayload(topic, queueId, nextOffset, minOffset, maxOffset, messages);
         response.setBody(JsonCodec.encode(body));
         return response;
+    }
+
+    /**
+     * 解析这次 pull 的起始位点。
+     * <ul>
+     *   <li><b>请求带了 offset</b> ⇒ 以请求为准（显式优先，与接线前逐字一致）。</li>
+     *   <li><b>请求没带 offset</b> ⇒ 问 {@code ConsumerOffsetManager.queryOffset(topic, queueId, group)}，
+     *       也就是"跨重启恢复"这条广告真正兑现的那一步。</li>
+     * </ul>
+     * 回落到 0 只剩两种情形，两种都是<b>结构上不可能按组恢复</b>而不是偷懒：
+     * ①请求没带消费组（三元组 key 缺一半）；②该组从没提交过位点（{@code queryOffset} 约定返回 -1）。
+     * 都不许抛，否则老的、不带 group 的请求会从今天起全部失败。
+     */
+    private long resolveStartOffset(RemotingCommand request, String topic, int queueId, String offsetStr) {
+        if (offsetStr != null && !offsetStr.trim().isEmpty()) {
+            return Long.parseLong(offsetStr.trim());
+        }
+        String group = request.getExtField(EXT_CONSUMER_GROUP);
+        if (group == null || group.trim().isEmpty()) {
+            return 0L;
+        }
+        ConsumerOffsetManager offsetManager = brokerController.getConsumerOffsetManager();
+        if (offsetManager == null) {
+            return 0L;
+        }
+        long committed = offsetManager.queryOffset(topic, queueId, group.trim());
+        if (committed < 0) {
+            // 该组在这个队列上没有提交记录: 与接线前同一形状 (从 0 开始)
+            return 0L;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("pull offset resolved from committed position: topic={} queueId={} group={} offset={}",
+                    topic, queueId, group, committed);
+        }
+        return committed;
     }
 
     /**
