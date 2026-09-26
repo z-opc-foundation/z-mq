@@ -9,7 +9,9 @@ import com.zifang.z.mq.common.message.MessageExt;
 import com.zifang.z.mq.common.message.MessageModel;
 import com.zifang.z.mq.common.protocol.PullResultPayload;
 import com.zifang.z.mq.common.util.JsonCodec;
+import com.zifang.z.mq.client.consumer.retry.BrokerBackedRetryTransport;
 import com.zifang.z.mq.client.consumer.retry.ConsumeRetryService;
+import com.zifang.z.mq.client.consumer.retry.DeadLetterQueue;
 import com.zifang.z.mq.client.consumer.retry.RetryPolicy;
 import com.zifang.z.mq.remoting.exception.RemotingSendRequestException;
 import com.zifang.z.mq.remoting.exception.RemotingTimeoutException;
@@ -51,6 +53,9 @@ public class DefaultMQPushConsumer {
     private int maxReconsumeTimes = ConsumeRetryService.DEFAULT_MAX_RECONSUME_TIMES;
     private RetryPolicy retryPolicy = RetryPolicy.STEPPED;
     private long fixedRetryIntervalMillis = ConsumeRetryService.DEFAULT_ORDERLY_RETRY_INTERVAL_MILLIS;
+    private long retryCheckIntervalMillis = ConsumeRetryService.DEFAULT_RETRY_CHECK_INTERVAL_MILLIS;
+    private ConsumeRetryService.RetryDelayStrategy retryDelayStrategy;
+    private ConsumeRetryService.RetryTransport retryTransport;
     private MessageModel messageModel = MessageModel.CLUSTERING;
 
     private MQClientInstance mqClientInstance;
@@ -92,8 +97,9 @@ public class DefaultMQPushConsumer {
 
         // 初始化消费重试服务
         this.consumeRetryService = new ConsumeRetryService(consumerGroup, maxReconsumeTimes,
-                retryPolicy, fixedRetryIntervalMillis);
+                retryPolicy, fixedRetryIntervalMillis, retryCheckIntervalMillis, retryDelayStrategy);
         this.consumeRetryService.setRetryCallback(this::doRetryConsume);
+        installDurableRetryPaths();
         this.consumeRetryService.start();
 
         this.pullExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -104,6 +110,26 @@ public class DefaultMQPushConsumer {
         this.running.set(true);
         this.pullExecutor.scheduleWithFixedDelay(this::doPull, 500, pullIntervalMillis, TimeUnit.MILLISECONDS);
         log.info("DefaultMQPushConsumer started: group={} topics={}", consumerGroup, subscriptionTable.keySet());
+    }
+
+    /**
+     * 把"重投副本"和"死信"这两条外投通路接到重试服务上。
+     * <p>
+     * 默认用走真 broker 的实现（{@code SEND_MESSAGE} + NameServer 路由）。调用方可以在
+     * {@code start()} 之前换一个实现塞进来 —— 传一个总是返回 false 的实现就等于把这两条
+     * 外投通路关掉，回到纯进程内那套行为。
+     */
+    private void installDurableRetryPaths() {
+        ConsumeRetryService.RetryTransport transport = this.retryTransport;
+        if (transport == null) {
+            transport = new BrokerBackedRetryTransport(this.mqClientInstance);
+            this.retryTransport = transport;
+        }
+        this.consumeRetryService.setRetryTransport(transport);
+        if (transport instanceof DeadLetterQueue.DlqPublisher) {
+            this.consumeRetryService.getDeadLetterQueue()
+                    .setPublisher((DeadLetterQueue.DlqPublisher) transport);
+        }
     }
 
     public void shutdown() {
@@ -274,7 +300,7 @@ public class DefaultMQPushConsumer {
                 commitOffsetThrough(brokerAddr, mq, payload.getNextOffset());
             } else if (status == ConsumeConcurrentlyStatus.RECONSUME_LATER) {
                 // 消费失败，将消息加入重试队列
-                handleConsumeFailure(messages);
+                handleConsumeFailure(messages, brokerAddr, mq, payload.getNextOffset());
             }
         } else if (listener instanceof MessageListener.Orderly) {
             ConsumeOrderlyStatus status = ((MessageListener.Orderly) listener).consumeMessage(
@@ -284,7 +310,7 @@ public class DefaultMQPushConsumer {
             } else if (status == ConsumeOrderlyStatus.RECONSUME_LATER
                     || status == ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT) {
                 // 消费失败，将消息加入重试队列
-                handleConsumeFailure(messages);
+                handleConsumeFailure(messages, brokerAddr, mq, payload.getNextOffset());
             }
         }
     }
@@ -295,8 +321,11 @@ public class DefaultMQPushConsumer {
      * <ul>
      *   <li>为什么是"这一批的 nextOffset"而不是"最后一条的 queueOffset"：{@code nextOffset} 是
      *       broker 给出的"下一条该读的位置"，与读侧 {@code queryOffset} 同一口径，差一就在这里出局。</li>
-     *   <li>为什么失败不提交：{@code RECONSUME_LATER} 走重试队列，位点停在上一批 ⇒ 未确认的消息会被重投，
-     *       这是 at-least-once 的既有语义，不许偷偷改掉。</li>
+     *   <li>为什么失败这一路也要看情况提交：{@code RECONSUME_LATER} 交给重投时，只有"后继还留在
+     *       这个进程里"才继续靠未确认来兜（位点停在上一批，消息被重拉）；后继一旦落到 broker 的存储里，
+     *       原消息就必须确认掉，否则它会连着自己的副本被一遍遍重拉。细节见
+     *       {@link #handleConsumeFailure}。两句话合起来才是 at-least-once：一条消息至少被投一次、
+     *       但投出去的后继只有一份在推进它。</li>
      *   <li>提交失败只告警、不打断拉取循环：本地缓存已经推进，消息不会因此丢；
      *       真正的保护是"下一次成功提交会带上更靠后的位点"。静默的代价记在日志里，不记在断言里。</li>
      * </ul>
@@ -313,15 +342,34 @@ public class DefaultMQPushConsumer {
     }
 
     /**
-     * 处理消费失败：将消息加入重试队列。
+     * 处理消费失败：把这一批逐条交给重投服务，并且<b>只在整批都有了落到存储里的后继</b>
+     * （重投副本进了 broker、或死信已经进了死信 Topic）时，才把这一批的位点确认掉。
+     * <ul>
+     *   <li>为什么要确认：副本已经在 broker 手里，下一次投递由"重新拉到那份副本"驱动。
+     *       原消息再不确认，它就会被一遍遍重拉，而每被拉一次就多落一份副本 —— 第 N 级有
+     *       2<sup>N</sup> 份，"最多 16 次"会直接退化成"投不完"。</li>
+     *   <li>为什么整批都要看过：只凭一条有后继就推进整批的 nextOffset，会把这一批里别的消息一起跳过。</li>
+     *   <li>为什么后继只在进程里时不确认：那时真相没有落盘，进程一停就没了。
+     *       这条批的位点停在上一批 ⇒ 未确认的消息会被重新拉到，at-least-once 的既有语义照旧。</li>
+     * </ul>
      */
-    private void handleConsumeFailure(List<MessageExt> messages) {
+    private void handleConsumeFailure(List<MessageExt> messages, String brokerAddr, MessageQueue mq,
+                                      long nextOffset) {
         if (consumeRetryService == null) {
             return;
         }
+        boolean allPersisted = true;
         for (MessageExt msg : messages) {
             int reconsumeTimes = msg.getReconsumeTimes();
-            consumeRetryService.addRetryMessage(msg, reconsumeTimes);
+            int outcome = consumeRetryService.addRetryMessageForOutcome(msg, reconsumeTimes);
+            if (outcome != ConsumeRetryService.OUTCOME_RETRY_PERSISTED
+                    && outcome != ConsumeRetryService.OUTCOME_DEAD_LETTER_PERSISTED) {
+                allPersisted = false;
+            }
+        }
+        if (allPersisted) {
+            // 后继都落到 broker 手里了，这一批的活由后继接手：确认掉，让它不再被重拉。
+            commitOffsetThrough(brokerAddr, mq, nextOffset);
         }
     }
 
@@ -474,6 +522,40 @@ public class DefaultMQPushConsumer {
 
     public ConsumeRetryService getConsumeRetryService() {
         return consumeRetryService;
+    }
+
+    /**
+     * 本消费组的死信 Topic 名（{@code %DLQ%{consumerGroup}}）。
+     * <p>
+     * "另起一个消费者订阅死信 Topic 做人工处理或告警"这句话里，订阅方要填的就是这个名字，
+     * 所以它必须能从消费端问得出来，而不是只活在常量里。
+     */
+    public String getDeadLetterTopic() {
+        String topic = consumeRetryService == null
+                ? new DeadLetterQueue(consumerGroup).getDlqTopic()
+                : consumeRetryService.getDeadLetterQueue().getDlqTopic();
+        return topic;
+    }
+
+    /** 当前生效的外投通路（{@code start()} 之前可以替换）. */
+    public ConsumeRetryService.RetryTransport getRetryTransport() {
+        return retryTransport;
+    }
+
+    public void setRetryTransport(ConsumeRetryService.RetryTransport retryTransport) {
+        this.retryTransport = retryTransport;
+    }
+
+    public long getRetryCheckIntervalMillis() {
+        return retryCheckIntervalMillis;
+    }
+
+    public void setRetryCheckIntervalMillis(long retryCheckIntervalMillis) {
+        this.retryCheckIntervalMillis = retryCheckIntervalMillis;
+    }
+
+    public void setRetryDelayStrategy(ConsumeRetryService.RetryDelayStrategy retryDelayStrategy) {
+        this.retryDelayStrategy = retryDelayStrategy;
     }
 
     public MessageModel getMessageModel() {
