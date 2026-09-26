@@ -176,6 +176,10 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         dst.setQueueId(src.getQueueId());
         dst.setQueueOffset(src.getQueueOffset());
         dst.setMsgId(src.getMsgId());
+        // 重投次数必须跟着进存储：编解码那一列（reconsumeTimes）读回来才有人认得它。
+        // 漏掉这一行的话，绕 broker 一圈的重投副本一律以"第 0 次"回到消费端，
+        // "最多重投 N 次"就变成了不封顶。
+        dst.setReconsumeTimes(src.getReconsumeTimes());
         // 序列化属性为字符串，便于写入 CommitLog
         StringBuilder props = new StringBuilder();
         if (src.getProperties() != null) {
