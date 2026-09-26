@@ -17,6 +17,7 @@ import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
 import com.zifang.z.mq.store.MessageStoreConfig;
 import com.zifang.z.mq.store.config.ConsumerOffsetManager;
+import com.zifang.z.mq.store.config.TopicConfigManager;
 import com.zifang.z.mq.store.log.CommitLog;
 import io.netty.channel.Channel;
 import org.apache.logging.log4j.LogManager;
@@ -79,7 +80,7 @@ public class BrokerController {
     // CommitLog
     private CommitLog commitLog;
 
-    /** 管理命令处理器（CASE_ADMIN_TOPIC 缓存与创建）. */
+    /** 管理命令处理器（topic 配置的创建与查询入口）. */
     private AdminBrokerProcessor adminBrokerProcessor;
 
     private SendMessageProcessor sendMessageProcessor;
@@ -93,11 +94,16 @@ public class BrokerController {
      *       提交边 = UPDATE_CONSUMER_OFFSET(220) 挂到 ConsumerOffsetProcessor.handleUpdateConsumerOffset,
      *       读取边 = PullMessageProcessor.resolveStartOffset 在请求不带 offset 时按 consumerGroup 回读
      *       queryOffset; 端到端验收见 ConsumerOffsetRestartE2ETest</li>
+     *   <li>topicConfigManager: Topic 配置持久化, 跨重启恢复。写边 = AdminBrokerProcessor 的建/改
+     *       与全量替换都走 putTopicConfig / replaceAllTopicConfigs（改表与落盘在同一次写锁里, 不存在
+     *       "内存改了文件没改"的中间态）; 读取边 = initialize() 里 start() 把盘上那份读回来, 位置早于
+     *       remotingServer.start(); 端到端验收见 TopicConfigRestartE2ETest</li>
      *   <li>pullRequestHoldService: Pull 长轮询, 新消息毫秒级响应</li>
      *   <li>scheduleMessageService: 18 级内置延迟消息</li>
      * </ul>
      */
     private ConsumerOffsetManager consumerOffsetManager;
+    private TopicConfigManager topicConfigManager;
     private PullRequestHoldService pullRequestHoldService;
     private ScheduleMessageService scheduleMessageService;
 
@@ -150,6 +156,13 @@ public class BrokerController {
             // 初始化 v2 增强组件
             this.consumerOffsetManager = new ConsumerOffsetManager(this.messageStoreConfig.getStorePathRootDir());
             this.consumerOffsetManager.start();
+
+            // topic 配置后端: start() 里就把盘上那份读回来。
+            // 位置承重 —— initialize() 全程不绑端口, remotingServer.start() 在 start() 里,
+            // 所以这张表在第一条请求进来之前就已经是完整的; 处理器 (registerProcessor 在本方法后面)
+            // 拿到的也是这个已经加载完的实例。
+            this.topicConfigManager = new TopicConfigManager(this.messageStoreConfig.getStorePathRootDir());
+            this.topicConfigManager.start();
 
             this.pullRequestHoldService = new PullRequestHoldService();
             // pullRequestHoldService 在 start() 时才启动 (后续)
@@ -425,6 +438,10 @@ public class BrokerController {
                 this.consumerOffsetManager.shutdown();
             }
 
+            if (this.topicConfigManager != null) {
+                this.topicConfigManager.shutdown();
+            }
+
             // v3 分布式: 关闭 SlaveSynchronize
             if (this.slaveSynchronize != null) {
                 this.slaveSynchronize.shutdown();
@@ -501,6 +518,13 @@ public class BrokerController {
      */
     public com.zifang.z.mq.broker.outapi.BrokerOutAPI getBrokerOutAPI() {
         return brokerOutAPI;
+    }
+
+    /**
+     * topic 配置后端（内存表 + 它的盘上镜像）, 由本控制器在 initialize() 里建好并加载.
+     */
+    public com.zifang.z.mq.store.config.TopicConfigManager getTopicConfigManager() {
+        return topicConfigManager;
     }
 
     /**

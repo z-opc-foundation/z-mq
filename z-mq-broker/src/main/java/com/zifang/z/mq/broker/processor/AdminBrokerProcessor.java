@@ -4,6 +4,7 @@ import com.zifang.z.mq.broker.BrokerController;
 import com.zifang.z.mq.common.QueueData;
 import com.zifang.z.mq.common.TopicConfig;
 import com.zifang.z.mq.common.ha.DataVersion;
+import com.zifang.z.mq.store.config.TopicConfigManager;
 import com.zifang.z.mq.remoting.netty.NettyRemotingAbstract;
 import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
@@ -14,10 +15,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Broker 端"管理"处理器（对标 RocketMQ AdminBrokerProcessor）.
@@ -33,8 +32,15 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
 
     private static final Logger log = LogManager.getLogger(AdminBrokerProcessor.class);
 
-    /** 本地 Topic 配置缓存 (subscriber reuse). */
-    private final ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<>();
+    /**
+     * Topic 配置的唯一持有者（内存表 + 它的盘上镜像都在里面）.
+     * <p>
+     * 本类不再自己持有 map：表与盘只能有一个持有者，否则"内存改了、文件没改"这种分叉就没有
+     * 任何东西能挡住。正常路径上这个实例由 {@code BrokerController.initialize()} 建好并 start()
+     * （即已经把盘上那份读回来）；只有绕过 initialize 直接构造本类时（单元测试）才现场建一个，
+     * 落盘位置沿用同一份 {@code MessageStoreConfig} 的 rootDir。
+     */
+    private final TopicConfigManager topicConfigManager;
 
     /** TopicConfig 版本号 (每次 CREATE/UPDATE/DELETE 自增, 用于 Slave 增量同步). */
     private final DataVersion topicConfigDataVersion = new DataVersion();
@@ -43,6 +49,13 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
 
     public AdminBrokerProcessor(BrokerController brokerController) {
         this.brokerController = brokerController;
+        TopicConfigManager manager = brokerController.getTopicConfigManager();
+        if (manager == null) {
+            manager = new TopicConfigManager(
+                    brokerController.getMessageStoreConfig().getStorePathRootDir());
+            manager.start();
+        }
+        this.topicConfigManager = manager;
     }
 
     @Override
@@ -79,7 +92,7 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
         int readN = readNStr == null ? TopicConfig.DEFAULT_READ_QUEUE_NUMS : Integer.parseInt(readNStr);
         int writeN = writeNStr == null ? TopicConfig.DEFAULT_WRITE_QUEUE_NUMS : Integer.parseInt(writeNStr);
         TopicConfig config = new TopicConfig(topic, readN, writeN, TopicConfig.PERM_READ_WRITE);
-        topicConfigTable.put(topic, config);
+        topicConfigManager.putTopicConfig(config);
         topicConfigDataVersion.assignNewVersion();
         log.info("Topic created: {} read={} write={}", topic, readN, writeN);
 
@@ -95,7 +108,7 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
         response.setOpaque(request.getOpaque());
 
         TopicListResult body = new TopicListResult();
-        body.setTopics(new ArrayList<>(topicConfigTable.keySet()));
+        body.setTopics(new ArrayList<>(topicConfigManager.getAllTopicConfigs().keySet()));
         response.setBody(com.zifang.z.mq.common.util.JsonCodec.encode(body));
         return response;
     }
@@ -112,14 +125,14 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
     }
 
     public TopicConfig getTopicConfig(String topic) {
-        return topicConfigTable.get(topic);
+        return topicConfigManager.selectTopicConfig(topic);
     }
 
     /**
      * 全量 TopicConfig 快照 (供 BrokerOutAPI / SlaveSynchronize).
      */
     public Map<String, TopicConfig> getAllTopicConfigs() {
-        return new HashMap<>(topicConfigTable);
+        return topicConfigManager.getAllTopicConfigs();
     }
 
     /**
@@ -128,11 +141,15 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
      * 用 incoming 完全替换本地表 (包括删除 incoming 中没有的条目).
      */
     public void replaceAllTopicConfigs(Map<String, TopicConfig> incoming) {
-        topicConfigTable.clear();
-        if (incoming != null) {
-            topicConfigTable.putAll(incoming);
-        }
+        topicConfigManager.replaceAllTopicConfigs(incoming);
         topicConfigDataVersion.assignNewVersion();
+    }
+
+    /**
+     * topic 配置的后端（内存表 + 盘上镜像）, 供装配与关单时强制落盘.
+     */
+    public TopicConfigManager getTopicConfigManager() {
+        return topicConfigManager;
     }
 
     /**

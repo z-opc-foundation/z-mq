@@ -10,11 +10,14 @@ import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
 import com.zifang.z.mq.store.MessageStoreConfig;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Path;
 
 /**
  * AdminBrokerProcessor 单元测试 — 不启动 Broker 网络端口, 仅验证协议处理。
@@ -23,14 +26,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class AdminBrokerProcessorTest {
 
+    /** 每个用例一个独立目录: 这里建过的 topic 会当场落盘, 不能留到下一个用例的"空表"断言里去. */
+    @TempDir
+    Path tempDir;
+
     /**
      * 构造一个最小可用的 BrokerController, 让 AdminBrokerProcessor 可访问 brokerConfig。
+     * <p>
+     * 存储根目录必须显式指进 {@link #tempDir}：{@code MessageStoreConfig} 的缺省值是
+     * {@code ~/store}，而 topic 配置的落盘根就是它 —— 不设既会把测试数据写到用户目录，
+     * 也会让上一个用例留下的 {@code topic_config.json} 被下一个用例读回来。
      */
     private BrokerController buildController() {
         BrokerConfig bc = new BrokerConfig();
         bc.setBrokerName("TestBroker");
         bc.setBrokerClusterName("TestCluster");
         MessageStoreConfig msc = new MessageStoreConfig();
+        msc.setStorePathRootDir(tempDir.resolve("store").toString());
+        msc.setStorePathCommitLog(tempDir.resolve("store").resolve("commitlog").toString());
         NettyServerConfig nsc = new NettyServerConfig();
         return new BrokerController(bc, msc, nsc);
     }
