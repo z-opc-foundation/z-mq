@@ -16,14 +16,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * 「消费失败 → 重投 → 次数单调递增 → 用尽转死信」这条通路今天的行为契约。
  * <p>
  * 这一组用例的目的不是证明某个新写的东西能用，而是把<b>已经在跑</b>的那条通路钉成可断言的事实：
  * 它现在绿，以后有人改坏了才会红。判据全部是因果的 ——
- * 每一次「到期重投」的因果点就是回调线程往队列里放的那一条快照，「转入死信」的因果点就是
- * 发布通路被叫到的那一次；等待本身只给「这件事根本没发生」一个有限的出路，不承担任何数值判定。
+ * 每一次「到期重投」的因果点就是回调线程往队列里放的那一条快照，「外投发生没发生」的因果点就是
+ * 发布通路被叫到的那一次；而死信自己的计数与缓存是 {@link DeadLetterQueue#putMessage} 在 publish
+ * <b>返回之后</b>才写的（写它的是调度线程），所以那两个读数是直接等它们本身，不拿外投事件当它们的替身。
+ * 等待本身只给「这件事根本没发生」一个有限的出路，不承担任何数值判定。
  * 没有任何用例用 sleep 或挂钟阈值当结论。
  * <p>
  * 为了在合理的时间内跑完 16 级重投，这里注入的是「到点即投 + 每 5ms 扫一次」这套参数。
@@ -88,7 +91,12 @@ public class ConsumeRetryServiceContractTest {
         }
     }
 
-    /** 记录「转入死信」这一事件本身：它是调度线程同步做的动作，所以它是可等的因果点。 */
+    /**
+     * 记录「外投被叫到」这一次：它是「死信有没有往 Topic 发」的因果点。
+     * <p>
+     * 它<b>不是</b>死信计数与进程内缓存的因果点 —— 那两样是 publish 返回之后才写的，
+     * 拿它当那两个读数的替身就是「等 A 断言 B」。
+     */
     private static final class RecordingPublisher implements DeadLetterQueue.DlqPublisher {
         private final BlockingQueue<String> events = new LinkedBlockingQueue<String>();
         private final List<String> topics = new ArrayList<String>();
@@ -117,6 +125,30 @@ public class ConsumeRetryServiceContractTest {
                 Thread.currentThread().interrupt();
             }
             assertNotNull(id, "始终没有转入死信（等满 " + BAIL_OUT_MILLIS + "ms）：" + what);
+        }
+    }
+
+    /**
+     * 等「死信记账落下」这件事本身，而不是等它的邻居。
+     * <p>
+     * {@link DeadLetterQueue#putMessage} 的次序是「先外投，publish 返回之后才涨计数、才进缓存」，
+     * 而调度线程跑完这一趟就走了，后面不再有任何事件可等 —— 所以断言那两个值之前必须直接等它们，
+     * 否则读到的就是「还没写完」的中间状态（慢机器上是 0，快机器上碰巧是 1）。
+     */
+    private static void awaitDeadLetterBooked(DeadLetterQueue dlq, long wanted, String what) {
+        long deadline = System.currentTimeMillis() + BAIL_OUT_MILLIS;
+        while (dlq.getTotalDeadLetters() < wanted || dlq.size() < wanted) {
+            if (System.currentTimeMillis() >= deadline) {
+                fail("等满 " + BAIL_OUT_MILLIS + "ms 死信记账仍没落下：" + what
+                        + "（实测 totalDeadLetters=" + dlq.getTotalDeadLetters()
+                        + ", size=" + dlq.size() + "）");
+            }
+            try {
+                Thread.sleep(5L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                fail("等待被中断: " + what);
+            }
         }
     }
 
@@ -207,8 +239,8 @@ public class ConsumeRetryServiceContractTest {
         ConsumeRetryService svc = fastService(GROUP);
         RecordingCallback callback = new RecordingCallback();
         svc.setRetryCallback(callback);
-        // accepts=false：这一跳量的是「发不出去时进程内那份还兜着」，同时 publish 被叫到
-        // 就是「转入死信」这个事件本身的因果点
+        // accepts=false：这一跳量的是「发不出去时进程内那份还兜着」；publish 被叫到是
+        // 「往死信 Topic 外投过」的因果点，但死信账上那一笔要另外等（见 awaitDeadLetterBooked）
         RecordingPublisher publisher = new RecordingPublisher(false);
         svc.getDeadLetterQueue().setPublisher(publisher);
         svc.start();
@@ -231,6 +263,7 @@ public class ConsumeRetryServiceContractTest {
                     "转入死信的原因要读得出来, 实际=" + publisher.reasons.get(0));
 
             DeadLetterQueue dlq = svc.getDeadLetterQueue();
+            awaitDeadLetterBooked(dlq, 1, "第 16 次失败的那一条要在死信账上落一笔");
             assertEquals(1, dlq.getTotalDeadLetters(), "死信计数记下这一条");
             assertEquals(1, dlq.size(), "这条没发出去, 所以进程内那份还在兜着");
 
@@ -249,6 +282,36 @@ public class ConsumeRetryServiceContractTest {
         } finally {
             svc.shutdown();
         }
+    }
+
+    // ==================== 3b. 上面那个等待为什么必须存在：记账落在 publish 返回之后 ====================
+
+    @Test
+    @DisplayName("外投被叫到的那一刻死信账上还是空的：计数与缓存在 publish 返回之后才写")
+    public void theDeadLetterAccountingIsWrittenAfterThePublishCallReturns() {
+        DeadLetterQueue dlq = new DeadLetterQueue(GROUP);
+        final List<Long> countersInsidePublish = new ArrayList<Long>();
+        final List<Integer> sizesInsidePublish = new ArrayList<Integer>();
+        dlq.setPublisher(new DeadLetterQueue.DlqPublisher() {
+            @Override
+            public boolean publish(MessageExt message, int reconsumeTimes, String dlqTopic, String reason) {
+                countersInsidePublish.add(Long.valueOf(dlq.getTotalDeadLetters()));
+                sizesInsidePublish.add(Integer.valueOf(dlq.size()));
+                return false;
+            }
+        });
+
+        // 同步调用，不经调度线程：这里量的就是 putMessage 自己内部的那一次先后
+        assertFalse(dlq.putMessage(message("M-ORDER-1"), 16,
+                "Exceeded max reconsume times: " + ConsumeRetryService.DEFAULT_MAX_RECONSUME_TIMES));
+
+        assertEquals(1, countersInsidePublish.size(), "外投就该被叫到一次");
+        assertEquals(0L, countersInsidePublish.get(0).longValue(),
+                "★ publish 被叫到时账上还是空的 —— 「等外投事件」结构上等不到这一笔记账, "
+                        + "这就是 awaitDeadLetterBooked 必须存在的理由");
+        assertEquals(0, sizesInsidePublish.get(0).intValue(), "同理, 缓存里那一刻也还没东西");
+        assertEquals(1L, dlq.getTotalDeadLetters(), "publish 返回之后这一笔才落到账上");
+        assertEquals(1, dlq.size(), "以及缓存里");
     }
 
     // ==================== 4. 没设置外投通路时，行为与进程内那套逐字相同 ====================

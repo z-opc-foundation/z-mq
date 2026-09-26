@@ -191,7 +191,8 @@ public class RetryDeadLetterE2ETest {
             // 它又失败一次 ⇒ 下一跳必须是第 3 次，而不是回到 0
             afterRestart.awaitWithLevel(3, "重启之后按第 3 次继续重投");
 
-            // ★ 承重断言（也是 CP-B 的靶子）：每一条读回来的副本带回来的级数都必须等于它自己那一级
+            // ★ 承重断言：摘掉它，"副本穿存储/重启之后级数被重置回 0"这类回归就没人管了 ——
+            // 每一条读回来的副本带回来的级数都必须等于它自己那一级
             int copies = 0;
             for (Snapshot s : afterRestart.all()) {
                 int levelInId = levelEncodedIn(s.msgId);
@@ -222,7 +223,7 @@ public class RetryDeadLetterE2ETest {
         startCluster();
         registerTopic(TOPIC_DOOMED);
         String dlqTopic = DeadLetterQueue.DLQ_TOPIC_PREFIX + DOOMED_GROUP;
-        // 产品侧今天没有「client 自动建 topic」的入口（见工单里那条路由面的账），死信 Topic 仍然要
+        // 产品侧今天没有「client 自动建 topic」的入口（路由面那条账），死信 Topic 仍然要
         // 走既有的管理请求注册。这一步本身就是「订阅死信 Topic」这句话还差一环的证据。
         registerTopic(dlqTopic);
         awaitRegisteredBrokerAddr(dlqTopic);
@@ -258,8 +259,16 @@ public class RetryDeadLetterE2ETest {
                     "消费侧观察到的级数必须一路走到 16, 实测=" + doomed.maxLevelSeen());
             assertEquals(1, doomed.countAtLevel(0), "原始消息只投过一次, 级数序列不许掺水");
 
-            // 内存那份只是缓存/统计：真发出去的那条不该再被它当第二真相留着
+            // 内存那份只是缓存/统计：真发出去的那条不该再被它当第二真相留着。
+            // 这一笔账是 putMessage 在 publish 返回之后才涨的，而上面那个因果点（另一个消费者从
+            // 死信 topic 上读到了这条）落在 publish 里面 —— 读得到不等于账已经落完 ⇒ 直接等这个计数本身。
             DeadLetterQueue dlq = killer.getConsumeRetryService().getDeadLetterQueue();
+            awaitTrue("消费端自己的死信记账落下（totalDeadLetters 到 1）", new Condition() {
+                @Override
+                public boolean holds() {
+                    return dlq.getTotalDeadLetters() >= 1L;
+                }
+            });
             assertEquals(1, dlq.getTotalDeadLetters(), "统计计数记下这一条");
             assertEquals(0, dlq.size(),
                     "★ 已经落到死信 topic 上的那一条不该同时是进程内缓存的内容（否则两处真相）");
