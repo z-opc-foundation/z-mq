@@ -9,9 +9,13 @@
 | `feature002_sync_master/` | 用户拍 2 问 | README:117/278「Master-Slave 同步双写（`SYNC_MASTER`）」 | 待裁定 |
 | `feature003_release_1_3_0/` | 用户点头 2 件 | 发 Central `1.3.0`、抬 z-boot 的 `z-mq.version` pin | 待点头 |
 | `feature004_transaction_check/` | W2f 证据先回来 | README:112「事务消息（两阶段提交 + 回查）」⇒ 回查需二次裁定 | 等证据 |
+| `feature005_metadata_lifecycle/` | 不等裁定，等排产归属 | `DataVersion` 两条恒 0 且不落盘、`DELETE_TOPIC` 有码无处理器、17 个零引用协议码 | 待排产 |
 
-**另有一批"登记未修"的缺陷不在这里**（不需要拍板，只是排队）：`DELETE_TOPIC`/`UPDATE_AND_CREATE_TOPIC_LIST` 有码无处理器、
-`DataVersion` 从不落盘、`TopicConfigManager.persist()` 咽 IOException 等，逐条在战役卡 `TASK-20260925-038.md` 的 W2d 收口节 §6。
+**登记口径**（2026-09-26 23:1x 更正）：先前这里写过"另有一批登记未修的缺陷不在这里，逐条在战役卡 §6"——
+那句话把两类东西混在了一起。实际是：**需要拍板的**在上面的表里；**不需要拍板、只需要排产归属的**从 feature005 起也进本册。
+顺带修掉当时那句说过头的表述："~~`DataVersion` 从不落盘~~" ⇒ 实测准确的是
+**版本号会被 JSON 编码进 `GET_ALL_*` 响应载荷（`BrokerOutAPI:87/97/111`），但没有一处写进磁盘文件，且三条版本里两条的 counter 永不自增**，
+证据与复跑命令在 `feature005_metadata_lifecycle/001_待排产.md`。
 
 约定：
 - 数字**一律现场测**，不抄本文档里的旧数；每份文档都写了取数命令。
