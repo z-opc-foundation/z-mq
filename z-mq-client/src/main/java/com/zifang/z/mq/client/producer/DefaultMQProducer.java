@@ -98,7 +98,7 @@ public class DefaultMQProducer {
         // 同步 RPC
         RemotingCommand response = instance.invokeSync(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis);
 
-        SendResult result = toSendResult(response, prepared.messageQueue);
+        SendResult result = toSendResult(response, prepared);
         if (result.getMsgId() == null) {
             result.setMsgId(prepared.request.getExtField("msgId"));
         }
@@ -175,8 +175,7 @@ public class DefaultMQProducer {
                             return;
                         }
                         try {
-                            callback.onSuccess(toSendResult(responseFuture.getResponseCommand(),
-                                    finalPrepared.messageQueue));
+                            callback.onSuccess(toSendResult(responseFuture.getResponseCommand(), finalPrepared));
                         } catch (Throwable e) {
                             callback.onException(e);
                         }
@@ -250,18 +249,26 @@ public class DefaultMQProducer {
 
     /**
      * 把 broker 响应翻译成 SendResult（同步与异步共用一套口径）.
+     * <p>
+     * <b>response == null 一律抛，不许就地造码。</b>刷盘超时这个码的语义是"消息已经写进存储、
+     * 只是同步刷盘没在时限内落住盘"，这件事只有 store 侧知道（CommitLog 产出对应的
+     * PutMessageStatus，broker 的 SendMessageProcessor 才把它写进响应体）。client 在根本没拿到
+     * 响应时对此一无所知：旧实现凭空写一个刷盘超时的码，等于把"可能根本没送到"洗成
+     * "送到了但没落盘"。抛 {@link RemotingSendRequestException} 才是"我不知道结果"的正确表达，
+     * 消息里带上 topic / brokerName / queueId / brokerAddr / opaque 供调用人定位这条请求。
+     * <p>
+     * 注意别把这段和"异步侧无响应"搞混：{@code NettyRemotingAbstract.invokeSyncImpl} 拿到空响应时
+     * 自己就抛（该文件里 {@code return null} 是 0 命中），所以 null 只代表 remoting 契约被违反
+     * （自定义 NettyRemotingClient 实现、或测试替身），不代表 broker 报了超时。
      */
-    private SendResult toSendResult(RemotingCommand response) {
-        return toSendResult(response, null);
-    }
-
-    private SendResult toSendResult(RemotingCommand response, MessageQueue mq) {
+    private SendResult toSendResult(RemotingCommand response, PreparedSend prepared)
+            throws RemotingSendRequestException {
+        if (response == null) {
+            throw noResponseFromBroker(prepared.messageQueue, prepared.brokerAddr, prepared.request);
+        }
         SendResult result = new SendResult();
         result.setSendStatus(SendStatus.SEND_OK);
-        if (response == null) {
-            result.setSendStatus(SendStatus.FLUSH_DISK_TIMEOUT);
-            return result;
-        }
+        MessageQueue mq = prepared.messageQueue;
         if (response.getCode() != RemotingSysResponseCode.SUCCESS) {
             result.setSendStatus(SendStatus.SEND_FAILED);
             result.setErrorMsg(response.getRemark());
@@ -282,6 +289,24 @@ public class DefaultMQProducer {
         }
         result.setMessageQueue(mq);
         return result;
+    }
+
+    /**
+     * "没拿到响应"的唯一表达：抛，并且把足以定位这条请求的信息带进消息。
+     * <p>
+     * 包装形状照 {@code MQClientInstance.invokeAndTranslateException} 已有的那一条
+     * （{@code RemotingSendRequestException} + 人可读的 addr），不自创异常类型。
+     */
+    private static RemotingSendRequestException noResponseFromBroker(MessageQueue mq, String brokerAddr,
+                                                                    RemotingCommand request) {
+        StringBuilder msg = new StringBuilder("no response command from broker; send outcome is unknown");
+        msg.append(", topic=").append(mq == null ? "<unknown>" : mq.getTopic());
+        msg.append(", brokerName=").append(mq == null ? "<unknown>" : mq.getBrokerName());
+        msg.append(", queueId=").append(mq == null ? "<unknown>" : String.valueOf(mq.getQueueId()));
+        msg.append(", brokerAddr=").append(brokerAddr == null ? "<unknown>" : brokerAddr);
+        msg.append(", opaque=").append(request == null ? "<unknown>" : String.valueOf(request.getOpaque()));
+        // 只抛：client 侧没有任何信息来源可以支撑一个"刷盘"结论
+        return new RemotingSendRequestException(msg.toString());
     }
 
     /** 一次发送的预备结果：选中的队列、目标地址与已编码的请求. */
@@ -325,11 +350,11 @@ public class DefaultMQProducer {
         request.setBody(JsonCodec.encode(inner));
 
         RemotingCommand response = instance.invokeSync(brokerAddr, request, sendMsgTimeoutMillis);
-        SendResult result = new SendResult();
         if (response == null) {
-            result.setSendStatus(SendStatus.FLUSH_DISK_TIMEOUT);
-            return result;
+            // 与 toSendResult 同一条口径：没响应就抛，绝不就地造一个只有 broker 才知道的码
+            throw noResponseFromBroker(mq, brokerAddr, request);
         }
+        SendResult result = new SendResult();
         if (response.getCode() != RemotingSysResponseCode.SUCCESS) {
             result.setSendStatus(SendStatus.SEND_FAILED);
             result.setErrorMsg(response.getRemark());
