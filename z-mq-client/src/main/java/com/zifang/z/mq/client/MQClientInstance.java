@@ -19,6 +19,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -107,10 +108,22 @@ public class MQClientInstance {
     }
 
     /**
+     * 丢掉这条 topic 的路由缓存并<b>重新取一次</b>.
+     * <p>
+     * 与 {@link #getTopicRouteData(String)} 的区别只有一个，但对"路由没解析出来"这一类失败是决定性的：
+     * 缓存里那份是同一份，再读一百次也是同一个错；这里先把缓存格清掉，让下一次读真的回到 NameServer。
+     *
+     * @return 重取回来的路由（拿不到就是 {@code null}）
+     */
+    public TopicRouteData refreshTopicRouteData(String topic) {
+        topicRouteTable.remove(topic);
+        return getTopicRouteData(topic);
+    }
+
+    /**
      * 真实从 NameServer 拉取 Topic 路由.
      */
-    private TopicRouteData fetchTopicRouteDataFromNameServer(String topic) {
-        if (namesrvAddr == null || namesrvAddr.isEmpty()) {
+    private TopicRouteData fetchTopicRouteDataFromNameServer(String topic) {        if (namesrvAddr == null || namesrvAddr.isEmpty()) {
             log.warn("No name server address configured");
             return null;
         }
@@ -213,6 +226,39 @@ public class MQClientInstance {
         AtomicInteger idx = queueIndexTable.computeIfAbsent(topic, k -> new AtomicInteger(0));
         int i = Math.abs(idx.getAndIncrement() % writableQueues.size());
         return writableQueues.get(i);
+    }
+
+    /**
+     * 选一个写队列，并<b>排除</b>指定 brokerName 所属的那几台.
+     * <p>
+     * 这条入口是给失败之后换机器用的：{@link #selectOneMessageQueue(String, TopicRouteData)}
+     * 每次调用都先 {@code Collections.shuffle} 再按自增位取模，出来的序列是随机的 ——
+     * "再来一次"完全可能又摇到刚才那台，那不叫换机器。这里刻意<b>不</b>打散：
+     * 候选集按路由里的固定顺序展开、按 topic 的自增位取模，被排除的 brokerName 一台都不会出现，
+     * 所以"换了机器"是构造保证的，不是摇出来的。
+     *
+     * @param excludedBrokerNames 上一趟已经试过而失败的 brokerName；{@code null}/空 时与不排除等价
+     * @return 候选被排光时返回 {@code null}（调用方据此决定是重取路由还是就地失败）
+     */
+    public MessageQueue selectOneMessageQueue(String topic, TopicRouteData routeData,
+                                              Collection<String> excludedBrokerNames) {
+        if (routeData == null || routeData.getQueueDatas() == null || routeData.getQueueDatas().isEmpty()) {
+            return null;
+        }
+        List<MessageQueue> candidates = new ArrayList<MessageQueue>();
+        for (MessageQueue mq : getAllWritableQueues(topic, routeData)) {
+            if (excludedBrokerNames != null && excludedBrokerNames.contains(mq.getBrokerName())) {
+                continue;
+            }
+            candidates.add(mq);
+        }
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        AtomicInteger idx = queueIndexTable.computeIfAbsent(topic, k -> new AtomicInteger(0));
+        // 与旧入口同一把轮询位，但先取模再抹掉符号位：自增绕回负数时会算出负下标
+        int slot = (idx.getAndIncrement() & Integer.MAX_VALUE) % candidates.size();
+        return candidates.get(slot);
     }
 
     public List<MessageQueue> getAllWritableQueues(String topic, TopicRouteData routeData) {

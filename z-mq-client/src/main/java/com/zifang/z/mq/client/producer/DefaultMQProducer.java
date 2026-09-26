@@ -23,6 +23,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.Serializable;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -44,6 +47,32 @@ public class DefaultMQProducer {
     private String clientId;
     private long sendMsgTimeoutMillis = 3000;
     private int defaultTopicQueueNums = 4;
+
+    /**
+     * 同步发送失败之后的重试次数。<b>口径：不含首次那次尝试</b>，所以一次发送最多走
+     * {@code 1 + retryTimesWhenSendFailed} 趟；置 0 等于关掉重试。
+     * <p>
+     * 这个数只是"最多还能试几趟"，<b>试不试得起来由 {@link SendRetryPolicy} 那张表决定</b>：
+     * 落在禁重试档上的失败一次都不会多试，哪怕这里是 100。
+     */
+    private int retryTimesWhenSendFailed = SendRetryPolicy.DEFAULT_RETRY_TIMES_WHEN_SEND_FAILED;
+
+    /** 白名单表本身（第 5/6 档那个"结论未知要不要试"的开关就在这张照上）. */
+    private SendRetryPolicy sendRetryPolicy = SendRetryPolicy.defaults();
+
+    /** 每趟重试之前该等多久；只在流控那一档真的等. */
+    private SendRetryBackoff sendRetryBackoff = SendRetryBackoff.DEFAULT;
+
+    /** "等"这个动作的出口，可注入 ⇒ 等待时长是一个能被数出来的量，不是挂钟读数. */
+    private SendRetrySleeper sendRetrySleeper = SendRetrySleeper.THREAD;
+
+    /**
+     * 已经发生过的重试趟数（不含首次），跨线程可读。
+     * <p>
+     * 这位计数只服务观测，<b>不参与任何业务判决</b>：判决走的是 {@link #sendRetryPolicy} 那张表，
+     * 循环边界走的是 {@link #retryTimesWhenSendFailed}。
+     */
+    private final AtomicLong sendRetryCount = new AtomicLong();
 
     protected MQClientInstance mqClientInstance;
     private final ConcurrentHashMap<String, MQClientInstance> instanceTable = new ConcurrentHashMap<>();
@@ -95,16 +124,151 @@ public class DefaultMQProducer {
      * 路由与队列始终按 {@code message.getTopic()} 这条【业务 topic】来选: 调用方不许为了
      * "让它落到别的 topic" 而就地改掉消息自己的 topic, 那是把业务 topic 丢掉的第一步
      * (broker 侧回投时就没有原始 topic 可用了).
+     * <p>
+     * <b>这一条走带白名单的重试循环</b>：每一趟失败都先拿 {@link SendRetryPolicy} 那张表下判决，
+     * 判到"可以重试"才进下一趟，并且下一趟一定换一台 broker（或先重取路由）。
+     * 事务的半消息走 {@link #prepareMessageSend} + {@link #executePreparedSend} 那两个出口，
+     * 一次一趟、不进这条循环 —— 半消息的二次确认必须发回写它的那一台，换机器就是把结论发丢了。
      */
     protected SendResult sendWithRequestCode(Message message, int requestCode) throws Exception {
-        return executePreparedSend(prepareMessageSend(message, requestCode));
+        final MQClientInstance instance;
+        try {
+            preflight(message);
+            instance = getOrCreateInstance();
+        } catch (Exception precheckFailure) {
+            SendRetryPolicy.Rule rule = sendRetryPolicy.explain(precheckFailure, SendRetryPolicy.Phase.PRECHECK);
+            if (willRetry(rule, 1, sendRetryPolicy.attemptBudget(retryTimesWhenSendFailed))) {
+                throw new IllegalStateException("unreachable: precheck failures are never retried");
+            }
+            throw precheckFailure;
+        }
+        return sendWithRetryLoop(message, requestCode, instance);
     }
 
     /**
-     * 只做组包 (含前置校验), 不发; 调用方拿到 {@link PreparedSend} 后就知道这条消息真正落到了
-     * 哪台 broker —— 事务的二次确认必须发往【写下半消息的那一台】, 而不是另查一次路由.
+     * 带白名单判决的同步发送循环.
+     * <p>
+     * 三件事都由 {@link SendRetryPolicy} 那张表说了算，这里一行"哪种异常可以重试"都不写死：
+     * <ol>
+     *   <li>组包阶段（{@link SendRetryPolicy.Phase#PREPARE}）失败：判到
+     *       {@link SendRetryPolicy.Decision#RETRY_AFTER_ROUTE_REFRESH} 才继续，并且下一趟之前
+     *       先 {@link MQClientInstance#refreshTopicRouteData(String)} 把这份路由丢掉重取 ——
+     *       不刷路由下一趟拿到的还是同一份、同一个错；</li>
+     *   <li>已交给 remoting 之后失败：按类型分档，判到可以重试就把这台 brokerName 记进
+     *       {@code triedBrokerNames}，下一趟从 {@link MQClientInstance#selectOneMessageQueue(String,
+     *       TopicRouteData, java.util.Collection)} 那条排除入口选队列 —— 换机器是构造保证的；</li>
+     *   <li>拿到了响应：响应里的结论（{@link SendRetryPolicy#decideForBodyStatus} 与
+     *       {@link SendRetryPolicy#decideForResponseCode(int)}）也走同一张表。默认整档禁重试 ——
+     *       那是存储侧的结论，重试它等于把同一条消息写第二遍。</li>
+     * </ol>
+     * 每进入一趟重试，先按 {@link SendRetryBackoff} 算出这次要等多久并交给
+     * {@link SendRetrySleeper} 去等，然后 {@code sendRetryCount} 涨一格。
      */
-    PreparedSend prepareMessageSend(Message message, int requestCode) throws Exception {
+    private SendResult sendWithRetryLoop(Message message, int requestCode, MQClientInstance instance)
+            throws Exception {
+        final String topic = message.getTopic();
+        final int maxAttempts = sendRetryPolicy.attemptBudget(retryTimesWhenSendFailed);
+        final Set<String> triedBrokerNames = new LinkedHashSet<String>();
+        TopicRouteData route = null;
+        boolean refreshRouteBeforeNextAttempt = false;
+        SendRetryPolicy.Tier pendingTier = SendRetryPolicy.Tier.UNRECOGNISED;
+        Exception lastFailure = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (attempt > 1) {
+                long delayMillis = sendRetryBackoff.delayMillisFor(attempt - 1, pendingTier);
+                sendRetrySleeper.await(delayMillis);
+                sendRetryCount.incrementAndGet();
+            }
+            if (refreshRouteBeforeNextAttempt) {
+                triedBrokerNames.clear();
+                route = instance.refreshTopicRouteData(topic);
+                refreshRouteBeforeNextAttempt = false;
+            } else if (route == null) {
+                route = instance.getTopicRouteData(topic);
+            }
+
+            PreparedSend prepared;
+            try {
+                prepared = prepareSend(instance, message, requestCode, route, triedBrokerNames);
+            } catch (Exception prepareFailure) {
+                SendRetryPolicy.Rule rule = sendRetryPolicy.explain(prepareFailure, SendRetryPolicy.Phase.PREPARE);
+                if (!willRetry(rule, attempt, maxAttempts)) {
+                    throw prepareFailure;
+                }
+                pendingTier = rule.getTier();
+                lastFailure = prepareFailure;
+                if (rule.getDecision() == SendRetryPolicy.Decision.RETRY_AFTER_ROUTE_REFRESH) {
+                    refreshRouteBeforeNextAttempt = true;
+                }
+                continue;
+            }
+
+            try {
+                RemotingCommand response =
+                        instance.invokeSync(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis);
+                SendResult result = toSendResult(response, prepared);
+                // 结论已经从响应里读出来了：这一档同样是表说了算，这里一行"哪种状态可以再写一遍"都不写死
+                SendRetryPolicy.Tier respondedTier =
+                        response.getCode() == RemotingSysResponseCode.SUCCESS
+                                ? SendRetryPolicy.Tier.STORE_REPORTED_STATUS
+                                : SendRetryPolicy.Tier.REMOTE_RESPONSE_REJECTED;
+                SendRetryPolicy.Decision verdictOnResponse =
+                        respondedTier == SendRetryPolicy.Tier.STORE_REPORTED_STATUS
+                                ? sendRetryPolicy.decideForBodyStatus(result.getSendStatus())
+                                : sendRetryPolicy.decideForResponseCode(response.getCode());
+                if (verdictOnResponse.allowsRetry()
+                        && willRetry(sendRetryPolicy.ruleFor(respondedTier), attempt, maxAttempts)) {
+                    triedBrokerNames.add(prepared.messageQueue.getBrokerName());
+                    pendingTier = respondedTier;
+                    continue;
+                }
+                return result;
+            } catch (Exception invokeFailure) {
+                SendRetryPolicy.Rule rule = sendRetryPolicy.explain(invokeFailure, SendRetryPolicy.Phase.INVOKE);
+                if (!willRetry(rule, attempt, maxAttempts)) {
+                    throw invokeFailure;
+                }
+                triedBrokerNames.add(prepared.messageQueue.getBrokerName());
+                pendingTier = rule.getTier();
+                lastFailure = invokeFailure;
+            }
+        }
+
+        if (lastFailure != null) {
+            throw lastFailure;
+        }
+        throw new IllegalStateException("send loop ended without an attempt for topic " + topic);
+    }
+
+    /**
+     * 把表上的判决落成"这一趟之后要不要再来一趟"：既要档位允许，也要还有预算。
+     * <p>
+     * 判决本身完全取自 {@link SendRetryPolicy.Rule}，这里只补上次数这一半条件；
+     * {@link SendRetryPolicy.Decision#RETRY_ON_ANOTHER_BROKER_ONLY_IF_OPT_IN} 这一档
+     * 由表上的开关（{@link SendRetryPolicy#isUnknownOutcomeRetriesAllowed()}）落成
+     * 可以或不可以 —— 默认不可以。
+     */
+    private boolean willRetry(SendRetryPolicy.Rule rule, int attempt, int maxAttempts) {
+        if (rule == null) {
+            return false;
+        }
+        SendRetryPolicy.Decision decision =
+                rule.getDecision().resolve(sendRetryPolicy.isUnknownOutcomeRetriesAllowed());
+        if (!decision.allowsRetry() || attempt >= maxAttempts) {
+            log.warn("send attempt {} not retried (tier={}, decision={}, retryTimesWhenSendFailed={}): {}",
+                    Integer.valueOf(attempt), rule.getTier(), decision,
+                    Integer.valueOf(retryTimesWhenSendFailed), String.valueOf(rule));
+            return false;
+        }
+        log.warn("send attempt {} failed at tier={}, decision={} -> retry {} of {}",
+                new Object[]{Integer.valueOf(attempt), rule.getTier(), decision,
+                        Integer.valueOf(attempt), Integer.valueOf(maxAttempts - 1)});
+        return true;
+    }
+
+    /** 出进程之前的三道校验：消息本身合不合法、producer 起没起. */
+    private void preflight(Message message) {
         if (message == null) {
             throw new IllegalArgumentException("message is null");
         }
@@ -112,6 +276,14 @@ public class DefaultMQProducer {
             throw new IllegalStateException("producer not started");
         }
         validateMessage(message);
+    }
+
+    /**
+     * 只做组包 (含前置校验), 不发; 调用方拿到 {@link PreparedSend} 后就知道这条消息真正落到了
+     * 哪台 broker —— 事务的二次确认必须发往【写下半消息的那一台】, 而不是另查一次路由.
+     */
+    PreparedSend prepareMessageSend(Message message, int requestCode) throws Exception {
+        preflight(message);
         return prepareSend(getOrCreateInstance(), message, requestCode);
     }
 
@@ -254,13 +426,36 @@ public class DefaultMQProducer {
     }
 
     private PreparedSend prepareSend(MQClientInstance instance, Message message, int requestCode) throws Exception {
-        TopicRouteData routeData = instance.getTopicRouteData(message.getTopic());
+        return prepareSend(instance, message, requestCode, instance.getTopicRouteData(message.getTopic()), null);
+    }
+
+    /**
+     * 组一条发送请求，队列从 {@code route} 里选，并且跳过 {@code excludedBrokerNames} 里那几台.
+     * <p>
+     * 路由由调用方递进来（而不是这里再查一次），是因为重试的那一趟要能区分
+     * "用缓存里这份路由再选一次" 与 "先重取路由再选" —— 这两件事只在
+     * {@link SendRetryPolicy.Decision#RETRY_AFTER_ROUTE_REFRESH} 那一档上是同一件。
+     */
+    private PreparedSend prepareSend(MQClientInstance instance, Message message, int requestCode,
+                                     TopicRouteData routeData,
+                                     Collection<String> excludedBrokerNames) throws Exception {
+        String topic = message.getTopic();
         if (routeData == null || routeData.getQueueDatas() == null || routeData.getQueueDatas().isEmpty()) {
-            throw new RemotingSendRequestException("No route for topic: " + message.getTopic());
+            throw new RemotingSendRequestException("No route for topic: " + topic);
         }
-        MessageQueue mq = instance.selectOneMessageQueue(message.getTopic(), routeData);
+        MessageQueue mq = instance.selectOneMessageQueue(topic, routeData, excludedBrokerNames);
+        if (mq == null && excludedBrokerNames != null && !excludedBrokerNames.isEmpty()) {
+            // 走到这里说明这份路由里的每一台都被这一条消息试过了 —— 换无可换。
+            // 这是"排除表用完了"这件记账事实，不是"路由没解析出来"，所以不去刷路由，
+            // 而是把剩下那一趟预算花在同一个地址上（口径与"重试次数含不含首次"一样是定死的）。
+            log.warn("topic {} has no broker left to fail over to (tried={}), reusing the route as is",
+                    topic, excludedBrokerNames);
+            mq = instance.selectOneMessageQueue(topic, routeData, null);
+        }
         if (mq == null) {
-            throw new RemotingSendRequestException("No writable queue for topic: " + message.getTopic());
+            throw new RemotingSendRequestException("No writable queue for topic: " + topic
+                    + (excludedBrokerNames == null || excludedBrokerNames.isEmpty()
+                    ? "" : ", all writable queues excluded: " + excludedBrokerNames));
         }
         String brokerAddr = lookupBrokerMasterAddr(routeData, mq.getBrokerName());
         if (brokerAddr == null) {
@@ -502,6 +697,70 @@ public class DefaultMQProducer {
 
     public void setClientId(String clientId) {
         this.clientId = clientId;
+    }
+
+    /** 重试次数（<b>不含</b>首次那次尝试）；0 表示关掉重试. */
+    public int getRetryTimesWhenSendFailed() {
+        return retryTimesWhenSendFailed;
+    }
+
+    public void setRetryTimesWhenSendFailed(int retryTimesWhenSendFailed) {
+        this.retryTimesWhenSendFailed = retryTimesWhenSendFailed;
+    }
+
+    /** 这一次发送一共允许走几趟（首次 + 重试），口径取自 {@link SendRetryPolicy#attemptBudget(int)}. */
+    public int getSendAttemptBudget() {
+        return sendRetryPolicy.attemptBudget(retryTimesWhenSendFailed);
+    }
+
+    public SendRetryPolicy getSendRetryPolicy() {
+        return sendRetryPolicy;
+    }
+
+    /**
+     * 换掉整张白名单表.
+     * <p>
+     * 表是判决的唯一来源，所以这里换掉它之后，禁重试的那几档一次都不会再多试。
+     */
+    public void setSendRetryPolicy(SendRetryPolicy sendRetryPolicy) {
+        this.sendRetryPolicy = sendRetryPolicy == null ? SendRetryPolicy.defaults() : sendRetryPolicy;
+    }
+
+    /** "结论未知"那一档（第 5/6 档）现在开没开：默认关着，开着即接受 at-least-once. */
+    public boolean isRetryWhenSendOutcomeUnknown() {
+        return sendRetryPolicy.isUnknownOutcomeRetriesAllowed();
+    }
+
+    /**
+     * 显式接受 at-least-once：把"请求可能已经进了 socket / 超时不代表没送到"那两档放进重试里.
+     * <p>
+     * 打开之后，这两档的失败会换一台 broker 再写一遍，而第一份很可能已经在存储里 ——
+     * 去重按对外口径由调用方根据 Key + 业务时间戳负责。
+     */
+    public void setRetryWhenSendOutcomeUnknown(boolean retryWhenSendOutcomeUnknown) {
+        this.sendRetryPolicy = SendRetryPolicy.of(retryWhenSendOutcomeUnknown);
+    }
+
+    /** 已经重试过几趟（不含首次）；只作观测用. */
+    public long getSendRetryCount() {
+        return sendRetryCount.get();
+    }
+
+    public SendRetryBackoff getSendRetryBackoff() {
+        return sendRetryBackoff;
+    }
+
+    public void setSendRetryBackoff(SendRetryBackoff sendRetryBackoff) {
+        this.sendRetryBackoff = sendRetryBackoff == null ? SendRetryBackoff.DEFAULT : sendRetryBackoff;
+    }
+
+    public SendRetrySleeper getSendRetrySleeper() {
+        return sendRetrySleeper;
+    }
+
+    /** "等一会儿"这个动作的出口，注入记录器之后等待时长就是可断言的读数. */
+    public void setSendRetrySleeper(SendRetrySleeper sendRetrySleeper) {
+        this.sendRetrySleeper = sendRetrySleeper == null ? SendRetrySleeper.THREAD : sendRetrySleeper;
     }
 
     /** P 占位.
