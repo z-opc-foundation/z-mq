@@ -30,6 +30,48 @@ public class DefaultMQPullConsumer {
 
     private static final Logger log = LogManager.getLogger(DefaultMQPullConsumer.class);
 
+    /**
+     * 挂起预算在 pull 请求里的字段名 —— 与 Broker 侧
+     * {@code PullMessageProcessor.EXT_SUSPEND_TIMEOUT_MILLIS} 是同一个线上契约
+     * （client 不依赖 broker, 所以这里只能是字面量; 两侧由 LongPollingWiringGuardTest 钉住同一个值）。
+     */
+    public static final String SUSPEND_TIMEOUT_FIELD = "suspendTimeoutMillis";
+
+    /** 不带挂起预算时的 pull RPC 超时（接线前写死的 3000ms，逐字保留）。 */
+    public static final long PULL_RPC_TIMEOUT_MILLIS = 3000L;
+
+    /**
+     * 响应里"这次 pull 因何而醒"的字段名 —— 与 Broker 侧
+     * {@code PullMessageProcessor.EXT_SUSPEND_WAKEUP} 同一个线上契约。
+     */
+    public static final String SUSPEND_WAKEUP_FIELD = "suspendWakeup";
+
+    /**
+     * 带挂起预算时，RPC 超时在预算之上再留的余量。
+     * <p>
+     * 为什么必须有这块余量：Broker 那边挂起到期由 PullRequestHoldService 的
+     * 扫描线程兑现（扫描周期 1s），真实释放时刻最晚是"预算 + 一个扫描周期"，再算上响应写回与
+     * 网络回程。客户端若只比预算多等一点点，就会出现"Broker 正要返回、客户端已经超时"，
+     * 而 pull 超时在客户端被读成 CONNECTION_LOST/异常 ⇒ 接了长轮询反而比不接更坏。
+     */
+    public static final long SUSPEND_RPC_MARGIN_MILLIS = 3000L;
+
+    /**
+     * pull 这一次 RPC 允许的超时：结构上保证"客户端一定比 Broker 醒得晚"。
+     * <p>
+     * 不变式（被机检钉住，不留在注释里）: 对任意预算 b ≥ 0 都有
+     * {@code pullRpcTimeoutMillis(b) > b}，且 Broker 侧实际挂起时长 {@code <= b}。
+     *
+     * @param suspendBudgetMillis 本次 pull 给 Broker 的挂起预算, {@code <= 0} 表示不挂起
+     * @return RPC 超时（毫秒）
+     */
+    public static long pullRpcTimeoutMillis(long suspendBudgetMillis) {
+        if (suspendBudgetMillis <= 0) {
+            return PULL_RPC_TIMEOUT_MILLIS;
+        }
+        return suspendBudgetMillis + SUSPEND_RPC_MARGIN_MILLIS;
+    }
+
     private String consumerGroup;
     private String namesrvAddr;
     private NettyClientConfig nettyClientConfig;
@@ -65,7 +107,7 @@ public class DefaultMQPullConsumer {
     }
 
     /**
-     * 同步拉取。
+     * 同步拉取（短轮询：读不到就立刻返回）。
      *
      * @param mq         队列
      * @param offset     起始 offset
@@ -73,6 +115,20 @@ public class DefaultMQPullConsumer {
      * @return 拉取结果（包含 nextOffset 与消息列表）
      */
     public PullResult pull(MessageQueue mq, long offset, int maxNums) throws Exception {
+        return pull(mq, offset, maxNums, 0L);
+    }
+
+    /**
+     * 同步拉取，允许 Broker 端长轮询。
+     *
+     * @param mq                  队列
+     * @param offset              起始 offset
+     * @param maxNums             最多拉多少条
+     * @param suspendBudgetMillis 允许 Broker 在"这个 offset 读不到消息"时挂起多久（毫秒）;
+     *                            {@code <= 0} 即短轮询, 请求与响应形状与三参版本逐字相同
+     * @return 拉取结果（包含 nextOffset 与消息列表）
+     */
+    public PullResult pull(MessageQueue mq, long offset, int maxNums, long suspendBudgetMillis) throws Exception {
         if (mq == null) {
             throw new IllegalArgumentException("MessageQueue is null");
         }
@@ -94,8 +150,13 @@ public class DefaultMQPullConsumer {
         request.addExtField("queueId", String.valueOf(mq.getQueueId()));
         request.addExtField("offset", String.valueOf(offset));
         request.addExtField("maxNum", String.valueOf(maxNums));
+        if (suspendBudgetMillis > 0) {
+            // 只带预算的请求才会挂起
+            request.addExtField(SUSPEND_TIMEOUT_FIELD, String.valueOf(suspendBudgetMillis));
+        }
 
-        RemotingCommand response = mqClientInstance.invokeSync(brokerAddr, request, 3000);
+        RemotingCommand response = mqClientInstance.invokeSync(brokerAddr, request,
+                pullRpcTimeoutMillis(suspendBudgetMillis));
         if (response == null) {
             return new PullResult(PullStatus.CONNECTION_LOST, mq, offset, java.util.Collections.emptyList());
         }
@@ -111,7 +172,8 @@ public class DefaultMQPullConsumer {
         PullStatus status = msgs == null || msgs.isEmpty()
                 ? PullStatus.NO_NEW_MSG
                 : PullStatus.FOUND;
-        return new PullResult(status, mq, nextOffset, msgs == null ? java.util.Collections.emptyList() : msgs);
+        return new PullResult(status, mq, nextOffset, msgs == null ? java.util.Collections.emptyList() : msgs,
+                response.getExtField(SUSPEND_WAKEUP_FIELD));
     }
 
     /**
@@ -214,12 +276,25 @@ public class DefaultMQPullConsumer {
         private final MessageQueue messageQueue;
         private final long nextOffset;
         private final List<MessageExt> msgFoundList;
+        /**
+         * Broker 这次为什么放开挂起的 pull（长轮询专用）。
+         * <p>
+         * null = 这次请求没挂起（不带预算的正常形状）；"message" 才代表"消息到达把这条 pull 叫醒了"，
+         * 取值见 {@code PullMessageProcessor.EXT_SUSPEND_WAKEUP} 的说明。
+         */
+        private final String suspendWakeup;
 
         public PullResult(PullStatus status, MessageQueue mq, long nextOffset, List<MessageExt> msgs) {
+            this(status, mq, nextOffset, msgs, null);
+        }
+
+        public PullResult(PullStatus status, MessageQueue mq, long nextOffset, List<MessageExt> msgs,
+                          String suspendWakeup) {
             this.status = status;
             this.messageQueue = mq;
             this.nextOffset = nextOffset;
             this.msgFoundList = msgs;
+            this.suspendWakeup = suspendWakeup;
         }
 
         public PullStatus getStatus() {
@@ -236,6 +311,13 @@ public class DefaultMQPullConsumer {
 
         public List<MessageExt> getMsgFoundList() {
             return msgFoundList;
+        }
+
+        /**
+         * @return Broker 回写的"因何而醒"标记, null 表示本次没有挂起
+         */
+        public String getSuspendWakeup() {
+            return suspendWakeup;
         }
     }
 }

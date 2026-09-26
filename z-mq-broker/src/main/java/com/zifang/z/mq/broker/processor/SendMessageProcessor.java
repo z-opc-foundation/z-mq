@@ -77,6 +77,20 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         inner.setQueueId(queueId);
 
         PutMessageResult result = commitLog.putMessage(inner);
+        // 长轮询到达侧唤醒: 消息一旦真进了存储 (可被 pull 读到), 就把 (topic, queueId) 报给
+        // PullRequestHoldService, 让挂在该队列上的 pull 立刻重读。
+        //
+        // 为什么落在这里而不是 CommitLog 的 haCallback 上: 那个钩子只给 commitLog 的物理位点和
+        // body 字节, 而 hold 表按 topic@queueId 分组 (PullRequestHoldService#key), 从 body 反解
+        // topic/queueId 既脆弱又要在测试里额外证明"解错队列会被发现"。本方法手里就有确定的
+        // topic + queueId (queueId 是 inner.setQueueId(...) 之后 CommitLog 用来建索引的那一个),
+        // 唤醒点落在知道 topic/queueId 的那一层才是对的。
+        //
+        // FLUSH_DISK_TIMEOUT 也要唤醒: 那条分支下记录已经 append 进存储 (后续 force/关机刷盘会落住),
+        // pull 已经能读到它 —— 不唤醒就等于"消息到了但没人被叫醒"。
+        if (result.isOk() || isAppendedToStore(result)) {
+            notifyLongPollingArrived(topic, queueId);
+        }
         // 构造 SendResult
         SendResult sendResult = new SendResult();
         AppendMessageResult amr = result.getAppendMessageResult();
@@ -117,6 +131,26 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
     @Override
     public boolean rejectRequest() {
         return false;
+    }
+
+    /**
+     * 记录是否已经 append 进 CommitLog (与"同步刷盘是否超时"是两件事).
+     * PUT_OK 之后 pull 就能从存储读到这条消息。
+     */
+    private static boolean isAppendedToStore(PutMessageResult result) {
+        AppendMessageResult amr = result.getAppendMessageResult();
+        return amr != null && amr.getStatus() == AppendMessageResult.AppendMessageStatus.PUT_OK;
+    }
+
+    /**
+     * 把"该队列有新消息"报给长轮询服务; 服务没装配时安静跳过 (不影响发送响应本身).
+     */
+    private void notifyLongPollingArrived(String topic, int queueId) {
+        com.zifang.z.mq.broker.longpoll.PullRequestHoldService holdService =
+                brokerController.getPullRequestHoldService();
+        if (holdService != null) {
+            holdService.notifyMessageArrived(topic, queueId);
+        }
     }
 
     private MessageExt decodeMessage(RemotingCommand request) {

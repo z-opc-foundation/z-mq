@@ -109,6 +109,29 @@ public class PullRequestHoldService {
      * @return SuspendedPull 句柄 (可用于 await), null=挂起失败 (超过 maxHoldCount 上限)
      */
     public SuspendedPull suspendPull(String topic, int queueId, long offset) {
+        return suspendPull(topic, queueId, offset, this.holdTimeoutMillis);
+    }
+
+    /**
+     * 挂起一个 Pull 请求, 但**挂多久由调用者按请求带来**（与三参版本的唯一差别）.
+     * <p>
+     * 为什么必须有这个重载:
+     * 三参版本只能表达"服务级默认 15s"这一个时长, 而挂起会占住 pull 业务线程
+     * （{@code BrokerConfig.pullMessageThreadPoolNums=16}），客户端 RPC 超时又是另一个数;
+     * 只要 broker 挂的时间不比客户端等的时间短, "接上长轮询"就会退化成"每次空拉都超时"。
+     * 所以请求方必须能把预算写进这一次挂起。
+     * <p>
+     * <b>时长的兑现方式</b>: 本方法不自己起计时器, 到期由 {@link #scanTimeoutHolds} 按
+     * {@code SCAN_INTERVAL_MS} 的节奏唤醒 —— 即真实释放时刻落在 {@code holdTimeoutMillis}
+     * 之后的下一个扫描点, 调用方的等待上界是 holdTimeoutMillis + 扫描周期。
+     *
+     * @param topic             Topic 名称
+     * @param queueId           队列 ID
+     * @param offset            Consumer 期望拉取的 offset
+     * @param holdTimeoutMillis 本次挂起的时长 (毫秒), 由请求侧预算给出
+     * @return SuspendedPull 句柄, null=挂起失败 (超过 maxHoldCount 上限)
+     */
+    public SuspendedPull suspendPull(String topic, int queueId, long offset, long holdTimeoutMillis) {
         if (totalHoldCount() >= maxHoldCount) {
             log.warn("suspendPull rejected: holdTable full ({} >= {})", totalHoldCount(), maxHoldCount);
             return null;
@@ -118,6 +141,18 @@ public class PullRequestHoldService {
         ConcurrentMap<SuspendedPull, Boolean> queue = holdTable.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
         queue.put(req, Boolean.TRUE);
         return req;
+    }
+
+    /**
+     * 超时扫描线程是否在跑.
+     * <p>
+     * 挂起的"到点必醒"只由该扫描线程兑现 (见 {@link #suspendPull(String, int, long, long)} 的说明);
+     * 服务未 start 时挂起等于无限期占用 pull 业务线程, 所以调用者挂起前要先问这一句。
+     *
+     * @return true=已 start() 且未 shutdown()
+     */
+    public boolean isStarted() {
+        return started.get();
     }
 
     /**
