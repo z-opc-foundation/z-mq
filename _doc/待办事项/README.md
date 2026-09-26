@@ -10,6 +10,8 @@
 | `feature003_release_1_3_0/` | 用户点头 2 件 | 发 Central `1.3.0`、抬 z-boot 的 `z-mq.version` pin | 待点头 |
 | `feature004_transaction_check/` | W2f 证据先回来 | README:112「事务消息（两阶段提交 + 回查）」⇒ 回查需二次裁定 | 等证据 |
 | `feature005_metadata_lifecycle/` | 不等裁定，等排产归属 | `DataVersion` 两条恒 0 且不落盘、`DELETE_TOPIC` 有码无处理器、17 个零引用协议码 | 待排产 |
+| `feature006_dlq_topic_registration/` | 用户拍板（范围扩张） | 死信 Topic `%DLQ%{group}` 要显式注册才投得出去：client 零建 topic 口（0 命中 vs 5 文件阳性对照）、broker 无 autocreate ⇒ 三选一（broker 特例自动登记 / client 启动登记 / 诚实化改文档） | 待裁定 |
+| `feature007_dlq_read_side/` | 不等裁定，等 W4 归属 | `pollAll()` 在 src/main 仍 0 读者（守卫被 `getDlqTopic` 满足 ⇒ 别把守卫绿当闭环完）；进程内死信缓存要不要一个批量取走口 | 待排产 |
 
 **登记口径**（2026-09-26 23:06–23:12 实测后更正）：先前这里写过"另有一批登记未修的缺陷不在这里，逐条在战役卡 §6"——
 那句话把两类东西混在了一起。实际是：**需要拍板的**在上面的表里；**不需要拍板、只需要排产归属的**从 feature005 起也进本册。
