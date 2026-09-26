@@ -5,7 +5,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,6 +38,25 @@ public class DeadLetterQueue {
     /** 统计计数器 */
     private final AtomicLong totalDeadLetters = new AtomicLong(0);
     private final AtomicLong totalExpired = new AtomicLong(0);
+
+    /**
+     * 「这一条已经转入过死信」的记账凭据：同一条消息（同一 Topic、同一 msgId、同一重投次数）
+     * 在发不出去的时候会被一遍遍重拉，每被重拉一次就是一次完整的转入 —— 而记账只该有第一笔。
+     * <p>
+     * 这份凭据独立于缓存本体：{@link #pollAll()} 把缓存取走之后，这条消息仍然已经被记过账了，
+     * 否则「取走一次」就把幂等性洗掉，下一次重拉又会多出一份同样的副本。
+     * <p>
+     * 容量与缓存同档（{@link #MAX_CACHED_DEAD_LETTERS} 条），按访问顺序淘汰最久没被提到的键，
+     * 因此它不会随运行时间无界增长；代价是超出容量的老键会被遗忘，那时同一条消息会被再记一笔账
+     * —— 宁可重复记账，也不许因为记错了而把一条真没兜着的消息吞掉。
+     */
+    private final Map<String, Boolean> deadLetteredKeys = new LinkedHashMap<String, Boolean>(
+            MAX_CACHED_DEAD_LETTERS * 4 / 3 + 1, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+            return size() > MAX_CACHED_DEAD_LETTERS;
+        }
+    };
 
     private final String consumerGroup;
     private final long retentionMillis;
@@ -117,6 +138,12 @@ public class DeadLetterQueue {
      * <p>
      * 先往死信 Topic 发（那条才是掉电不丢的真相），再把这一条记进进程内队列当缓存与统计；
      * 发不出去时进程内这一份仍然留着，至少不丢读数。
+     * <p>
+     * 外投这一路<b>永远不判重</b>：只要被叫到就真发一次。位点提交之后正常不会再被重拉，
+     * 真被重拉时宁可死信 Topic 上多一条，也不许"以为发过了"就不发。
+     * 判重只发生在发不出去的那一路 —— 那条消息会被反复重拉，每次重拉都进这个方法，
+     * 如果照单记账，缓存里就会堆同一份副本的 N 个分身，并且第 {@value #MAX_CACHED_DEAD_LETTERS} + 1
+     * 个分身会把最早那一份"必须兜着"的条目挤出去。
      *
      * @param message        消息
      * @param reconsumeTimes 已重试次数
@@ -136,23 +163,67 @@ public class DeadLetterQueue {
                         consumerGroup, dlqTopic, e.getMessage());
             }
         }
+        if (published) {
+            // 真相已经在死信 Topic 里，进程内再留一份就成了"看起来有两份真相"的第二持有者。
+            totalDeadLetters.incrementAndGet();
+            log.warn("Message moved to DLQ: topic={}, msgId={}, reconsumeTimes={}, reason={}, group={}"
+                            + " dlqTopic={} published={}",
+                    message.getTopic(), message.getMsgId(), reconsumeTimes, reason, consumerGroup,
+                    dlqTopic, Boolean.TRUE);
+            return true;
+        }
+
+        if (!firstDeadLetterOf(message, reconsumeTimes)) {
+            // 同一条消息的再一次重拉：不 offer、不涨统计、不动过期计数，
+            // 但"它没进死信 Topic"这个事实没变，所以照旧回 false。
+            log.debug("Duplicate dead-letter delivery ignored: group={} topic={} msgId={} reconsumeTimes={}",
+                    consumerGroup, message.getTopic(), message.getMsgId(), reconsumeTimes);
+            return false;
+        }
+
         DeadLetterMessage dlqMessage = new DeadLetterMessage(message, reconsumeTimes, reason);
-        dlqMessage.setPublished(published);
+        dlqMessage.setPublished(false);
         totalDeadLetters.incrementAndGet();
-        if (!published) {
-            // 发不出去的那些才需要进程内这一份兜着；发出去的真相已经在死信 Topic 里，
-            // 再留一份就成了"看起来有两份真相"的第二持有者。
-            deadLetterQueue.offer(dlqMessage);
-            while (deadLetterQueue.size() > MAX_CACHED_DEAD_LETTERS && deadLetterQueue.poll() != null) {
-                // 只裁缓存，计数器不动（统计口径是"进过死信多少条"，不是"缓存里还剩多少条"）
-                totalExpired.incrementAndGet();
-            }
+        deadLetterQueue.offer(dlqMessage);
+        while (deadLetterQueue.size() > MAX_CACHED_DEAD_LETTERS && deadLetterQueue.poll() != null) {
+            // 只裁缓存，计数器不动（统计口径是"进过死信多少条"，不是"缓存里还剩多少条"）
+            totalExpired.incrementAndGet();
         }
         log.warn("Message moved to DLQ: topic={}, msgId={}, reconsumeTimes={}, reason={}, group={}"
                         + " dlqTopic={} published={}",
                 message.getTopic(), message.getMsgId(), reconsumeTimes, reason, consumerGroup,
-                dlqTopic, Boolean.valueOf(published));
-        return published;
+                dlqTopic, Boolean.FALSE);
+        return false;
+    }
+
+    /**
+     * 这条消息是不是第一次转入死信：第一次返回 true（该记账、该进缓存），
+     * 之后同一条（同 Topic、同 msgId、同重投次数）再进来返回 false。
+     * <p>
+     * 认不出这条消息是谁的（Topic 或 msgId 为空）时一律当第一次 —— 判不了重就退回旧行为，
+     * 宁可重复记一笔账，也不许把两条不同的消息当成一条、把后一条吞掉。
+     */
+    private boolean firstDeadLetterOf(MessageExt message, int reconsumeTimes) {
+        String topic = message.getTopic();
+        String msgId = message.getMsgId();
+        if (topic == null || topic.isEmpty() || msgId == null || msgId.isEmpty()) {
+            return true;
+        }
+        String key = dedupKeyOf(topic, msgId, reconsumeTimes);
+        synchronized (deadLetteredKeys) {
+            if (deadLetteredKeys.containsKey(key)) {
+                return false;
+            }
+            deadLetteredKeys.put(key, Boolean.TRUE);
+            return true;
+        }
+    }
+
+    /**
+     * 判重键：长度前缀自定界，所以 {@code (topic, msgId)} 的任何一种切法都不会和另一组撞成同一个串。
+     */
+    private static String dedupKeyOf(String topic, String msgId, int reconsumeTimes) {
+        return topic.length() + ":" + topic + msgId.length() + ":" + msgId + '@' + reconsumeTimes;
     }
 
     /**
@@ -171,6 +242,9 @@ public class DeadLetterQueue {
 
     /**
      * 从死信队列取出所有消息（用于消费者订阅处理）。
+     * <p>
+     * 取走只清缓存本体，不清"已经记过账"那份凭据：这条消息要是之后还被重拉，
+     * 再往缓存里塞一份就是同一个死信的两份分身。
      *
      * @return 死信消息列表
      */
@@ -210,10 +284,16 @@ public class DeadLetterQueue {
     }
 
     /**
-     * 清空死信队列。
+     * 清空死信队列：连同"已经记过账"那份凭据一起清零，等于把这个兜底容器整个重置。
+     * <p>
+     * 重置之后同一条消息再被重拉时会重新进缓存 —— 这是显式重置的语义，
+     * 与 {@link #pollAll()}（取走内容但保留记账）不是一回事。
      */
     public void clear() {
         deadLetterQueue.clear();
+        synchronized (deadLetteredKeys) {
+            deadLetteredKeys.clear();
+        }
         log.info("DLQ cleared: group={}", consumerGroup);
     }
 

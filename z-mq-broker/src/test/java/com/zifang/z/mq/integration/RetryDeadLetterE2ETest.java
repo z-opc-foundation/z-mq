@@ -63,7 +63,11 @@ import static org.junit.jupiter.api.Assertions.fail;
  *       判据是「另一个消费者从死信 Topic 上读到了这一条」，不是「某个内存队列 size() 加了 1」。</li>
  *   <li>{@link #deadLetterWithoutRouteFallsBackInsteadOfVanishing()} —— 路由缺失时的证据。
  *       Topic 没在 NameServer 上注册过时外投通路量不到路由 ⇒ 消息必须退回进程内兜底，
- *       而不是「发出去了但其实没人收」。</li>
+ *       而不是「发出去了但其实没人收」。位点因此不提交 ⇒ 同一份副本必然被反复重拉；
+ *       这一例的因果点是「同一份第 16 级副本被投到第三次」—— 快照记在监听器入口、
+ *       记账发生在监听器返回之后（同一个 pull 线程的顺序调用），所以只有等再下一次投递可见，
+ *       前两次的记账才必然已经落完。钉的是「同一条消息转入死信」只记一笔账、
+ *       缓存里不许被它自己的副本挤出一第二份。</li>
  * </ol>
  * <b>口径说明</b>：
  * <ul>
@@ -295,20 +299,39 @@ public class RetryDeadLetterE2ETest {
             assertTrue(last.isRetry, "走到用尽的这一条当然认得出自己是重投的");
 
             DeadLetterQueue dlq = consumer.getConsumeRetryService().getDeadLetterQueue();
-            awaitTrue("次数用尽之后必须转入死信", new Condition() {
-                @Override
-                public boolean holds() {
-                    return dlq.getTotalDeadLetters() >= 1;
-                }
-            });
-            assertEquals(1, dlq.getTotalDeadLetters());
+            // 因果点：等「同一份第 16 级副本被投到第三次」这件事真的发生。
+            // 这条通路的前提是死信 topic 量不到路由 ⇒ 外投必然失败 ⇒ 位点不提交 ⇒ 那一条必然被反复重拉
+            // （既有的 at-least-once 语义）。等的是投递事件本身，不是「计数器涨起来了」那个瞬态读数。
+            //
+            // 为什么是第三次而不是第二次：投递快照是在监听器入口记下的（consumeMessage 的头一件事），
+            // 而「转入死信」的记账发生在监听器返回之后（DefaultMQPushConsumer 的 pull 回调里
+            // consumeMessage(...) → handleConsumeFailure(...) 是同一个 pull 线程上的顺序调用）。
+            // 所以「第 N+1 条快照已经可见」才意味着「第 N 次的记账必然已经落完」；
+            // 只等到第二次就断言，量的还是第二次记账抢不抢得到，那仍然是和 race 赛跑。
+            doomed.awaitDeliveries(16, 3,
+                    "死信没路由 ⇒ 位点不提交 ⇒ 同一份第 16 级副本必须被重拉到第三次");
+            int redeliveries = doomed.countAtLevel(16);
+            assertTrue(redeliveries >= 3,
+                    "Recorder 的账要认得出「至少投过三次」, 实测=" + redeliveries);
+
+            // 前两次重拉的记账此时都已经落完了 ⇒ 「同一条消息转入死信」若不幂等，
+            // 记账与缓存必然已经被它自己的副本撑开。
+            assertEquals(1, dlq.getTotalDeadLetters(),
+                    "★ 同一条消息转入死信只记一笔账：第 16 级已经被投了 " + redeliveries
+                            + " 次（前 " + (redeliveries - 1) + " 次的记账必然已落完），"
+                            + "计数不许涨到 " + (redeliveries - 1) + "（实测=" + dlq.getTotalDeadLetters() + "）");
             assertEquals(1, dlq.size(),
-                    "★ 发不出去的那一条必须留在进程内兜底（否则这条消息既没进 topic 也没人记得, 是凭空消失）");
+                    "★ 发不出去的那一条必须留在进程内兜底（否则这条消息既没进 topic 也没人记得, 是凭空消失）,"
+                            + " 且不许被它自己的副本挤掉；重投 " + redeliveries + " 次之后缓存里实测="
+                            + dlq.size() + " 份");
+            assertEquals(0, dlq.getTotalExpired(),
+                    "同一条消息的自重复不许被记成「过期清理」, 实测 totalExpired=" + dlq.getTotalExpired());
             List<DeadLetterQueue.DeadLetterMessage> cached = dlq.pollAll();
             assertEquals(1, cached.size());
             assertEquals(16, cached.get(0).getReconsumeTimes());
             assertFalse(cached.get(0).isPublished(), "缓存里那条要标得出来「它没进死信 topic」");
             assertTrue(routeAbsent(dlqTopic), "收尾再看一次：全程没有任何东西替它建过路由");
+
         } finally {
             consumer.shutdown();
             launchedConsumers.remove(consumer);
@@ -389,6 +412,24 @@ public class RetryDeadLetterE2ETest {
             arrivals.addAll(buffered);
             throw new AssertionError("等满 " + BAIL_OUT_MILLIS + "ms 也没等到第 " + level
                     + " 级被投到：" + what + " ; 已经看到的=" + describe(all));
+        }
+
+        /** 等「第 level 级被投到第 wanted 次」这件事由投递线程自己写下：判据是 Recorder 记下的投递条数, 不是时间. */
+        void awaitDeliveries(int level, int wanted, String what) {
+            long deadline = System.currentTimeMillis() + BAIL_OUT_MILLIS;
+            while (countAtLevel(level) < wanted) {
+                if (System.currentTimeMillis() >= deadline) {
+                    fail("等满 " + BAIL_OUT_MILLIS + "ms，第 " + level + " 级只被投到 "
+                            + countAtLevel(level) + " 次（想要至少 " + wanted + "）：" + what
+                            + " ; 已经看到的=" + describe(all));
+                }
+                try {
+                    Thread.sleep(20L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    fail("等待被中断: " + what);
+                }
+            }
         }
 
         Snapshot awaitAny(String what) {
