@@ -98,6 +98,9 @@ public class RestartDurabilityTest {
             written = sendAndAcknowledge(first, "ack-clean");
             assertEquals(MESSAGE_COUNT, written.size());
 
+            // 第一步写消息之后才该问"有没有 mapped file"——写路径懒建首文件（见 startBroker 注释）。
+            assertWritePathHasCreatedMappedFile(first, "干净用例首批 SEND_OK 之后");
+
             CommitLog log1 = first.getCommitLog();
             MappedFile last1 = log1.getMappedFileQueue().peekLastMappedFile();
             assertEquals(last1.getWrotePosition(), last1.getFlushedPosition(),
@@ -158,6 +161,10 @@ public class RestartDurabilityTest {
         File rootDir = new File(storeRoot(sub));
 
         List<Written> written = sendAndAcknowledge(first, "ack-crash");
+
+        // 掉电前置条件之一：写路径已经把首文件建出来并写进了字节（见 startBroker 注释）。
+        assertWritePathHasCreatedMappedFile(first, "掉电用例首批 SEND_OK 之后");
+
         CommitLog log1 = first.getCommitLog();
         MappedFile last1 = log1.getMappedFileQueue().peekLastMappedFile();
         assertEquals(last1.getWrotePosition(), last1.getFlushedPosition(),
@@ -302,10 +309,29 @@ public class RestartDurabilityTest {
             assertEquals(e.flag, a.getFlag(), at + "flag");
             assertArrayEquals(e.body, a.getBody(), at + "body");
             assertEquals(e.bornTimestamp, a.getBornTimestamp(), at + "bornTimestamp");
-            assertEquals(e.queueOffset, a.getQueueOffset(), at + "queueOffset（确认时给客户的位点）");
+            // 确认时给客户的位点必须就是重启后读回来的队列位点。这条钉的是 src/main 的一处真缺陷
+            // （本测试抓到、09-26 已修）：broker 一度把 commitLog 的【物理】位点当成队列位点回给客户 ——
+            // 站点是 SendMessageProcessor / TransactionMessageProcessor 里的
+            // `sendResult.setQueueOffset(amr.getWroteOffset())`，而 wroteOffset 就是 MappedFile:214-215
+            // 的 `fileFromOffset + expectedPos`；真队列位点在 CommitLog:309-310 分配、写在同一条消息对象上。
+            // 下面那条 "== i 连续递增" 是绿的，所以本条红的时候可以直接断定回错了字段。
+            // 反证：把 :90 还原成 `amr.getWroteOffset()` ⇒ 两例各自点名红（acked == rereadCommitLogOffset）。
+            assertEquals(e.queueOffset, a.getQueueOffset(), at + "queueOffset（确认时给客户的位点）"
+                    + " acked=" + e.queueOffset + " rereadQueueOffset=" + a.getQueueOffset()
+                    + " rereadCommitLogOffset=" + a.getCommitLogOffset()
+                    + "；acked == commitLogOffset 即 broker 回错了字段");
             assertTrue(a.getCommitLogOffset() >= 0, at + "commitLogOffset 必须由重启后的扫描给出");
             assertTrue(a.getStoreSize() > 0, at + "storeSize 必须是非默认值");
-            assertTrue(a.getBodyCRC() > 0, at + "bodyCRC 必须由重启后的逐条校验给出");
+            // bodyCRC 在本仓是【有符号 int】：UtilAll.crc32 在 CommitLog.java:780-786（包私有类）
+            // 返回 `(int) java.util.zip.CRC32#getValue()`，所以一条合法算出的 CRC 完全可能 < 0。
+            // 原来这条 `getBodyCRC() > 0` 把 CRC 当成了无符号数，实测是假红：
+            // w1t3_after_fix.log —— 干净用例 index=0 红（该 body 的 CRC 最高位为 1）、
+            // 掉电用例 index=0 反而绿（它那个 body 字符串的 CRC 恰好为正），差的只是符号位。
+            // 判据换成与姊妹测试 CommitLogRecoveryTest:206 同一口径、且严格更强的两条：
+            // 独立复算的 CRC 必须逐位等于重启后读回的值（这比"大于 0"强得多），且不许是没算过的 0。
+            assertEquals(crc32Of(e.body), a.getBodyCRC(),
+                    at + "bodyCRC 必须等于独立复算的 body crc32（重启后的逐条校验给的就是这个值）");
+            assertTrue(a.getBodyCRC() != 0, at + "bodyCRC 不许是没算过的默认值 0");
             assertTrue(a.getStoreTimestamp() > 0, at + "storeTimestamp 由 broker 侧写入，必须非默认");
 
             // 非空洞自检：位点必须真的连续，否则"读回 100 条"可能是同一批被数了两遍
@@ -340,13 +366,75 @@ public class RestartDurabilityTest {
         NettyServerConfig nsc = new NettyServerConfig();
         nsc.setListenPort(freePort());
 
+        // 起 broker <b>之前</b>先量一次盘上现状：这决定下面那条守卫朝哪个方向断言。
+        boolean firstLaunch = isStoreDirEmpty(msc.getStorePathCommitLog());
+
         BrokerController broker = new BrokerController(bc, msc, nsc);
         assertTrue(broker.initialize(), "BrokerController.initialize() 必须成功（真 load）");
         broker.start();
         launched.add(broker);
-        assertTrue(broker.getCommitLog().getMappedFileQueue().getMappedFiles().size() > 0,
-                "start() 后必须真有 mapped file");
+
+        // 守卫是【双向】的，方向由"起 broker 之前盘上有没有文件"决定 —— 本方法被两种生命周期各调一次：
+        // 首次启动（空存储）与重启（盘上已有消息）。原来那一条单向的 size() > 0 在两种形状里都只
+        // 可能在其中一种成立，所以它对空存储必然是假红（实测：w1t3_repro_before2.log 两例全死在本行前身）。
+        //
+        // 本仓口径（把设计钉住，不是迁就现状）：空存储刚 load()+start() 之后 mapped file 数就是 0，
+        // 首文件由【写路径】懒建，理由三条，都在 src/main 里逐条实测过：
+        //   1) 建文件的唯一站点是 MappedFileQueue.getLastMappedFile(startOffset, createIfNotExists)
+        //      的 :186 分支（:198 new MappedFile(...)），而 src/main 里唯一走到它的调用者是
+        //      CommitLog 的写入路径 :315 `getLastMappedFile()` ⇒ :214-215 `getLastMappedFile(0, true)`；
+        //   2) 启动路径上没人调它：CommitLog.load():146 只调 mappedFileQueue.load()，而
+        //      MappedFileQueue.load():58-64 目录不存在时只 mkdirs() 就返回，盘上无文件时一个都不建；
+        //      CommitLog.start():115-119 只做 createAbortFile() + 起刷盘线程；
+        //   3) MappedFileQueue:329 的注释明说"不创建文件：getMaxOffset 老实现走 getLastMappedFile()，
+        //      会在读的时候顺手建文件"—— 也就是说"不在读路径顺手建文件"是刻意维持的不变式。
+        // ⇒ 哪天有人让 load()/start() 顺手建首文件，下面这条 assertEquals 会红，逼他表态。
+        int files = broker.getCommitLog().getMappedFileQueue().getMappedFiles().size();
+        if (firstLaunch) {
+            assertEquals(0, files,
+                    "空存储 load()+start() 后必须 0 个 mapped file（首文件是写路径懒建的，见本行上方注释）");
+        } else {
+            assertTrue(files > 0,
+                    "重启必须把盘上已有的 mapped file 加载回来（load() 只扫盘，实测 files=" + files + "）");
+        }
         return broker;
+    }
+
+    /**
+     * 第一条消息被确认写下去之后，检查"写路径真的把首文件建出来并写进了字节"。
+     * <p>
+     * 这才是原守卫（{@code start() 后必须真有 mapped file}）想说而说不出来的意思：它落在一个可证的
+     * 事实（写路径建文件）上，而不是落在一个本仓根本不成立的启动不变式上。两条都要：
+     * 只建文件没写字节、或写了字节却没进队列，都是坏。
+     */
+    private void assertWritePathHasCreatedMappedFile(BrokerController broker, String at) {
+        int files = broker.getCommitLog().getMappedFileQueue().getMappedFiles().size();
+        assertTrue(files > 0, at + "：成功发送之后写路径必须已懒建出 mapped file（files=" + files + "）");
+        MappedFile last = broker.getCommitLog().getMappedFileQueue().peekLastMappedFile();
+        assertNotNull(last, at + "：getMappedFiles() 非空而 peekLastMappedFile() 为 null，队列自相矛盾");
+        assertTrue(last.getWrotePosition() > 0,
+                at + "：首文件必须真的写进了字节，wrotePosition=" + last.getWrotePosition());
+    }
+
+    /** 目录不存在或里面没有任何文件 ⇒ 本仓这次是"空存储首次启动"，而不是"重启后加载"。 */
+    private static boolean isStoreDirEmpty(String path) {
+        File dir = new File(path);
+        if (!dir.exists()) {
+            return true;
+        }
+        File[] children = dir.listFiles();
+        return children == null || children.length == 0;
+    }
+
+    /**
+     * 独立复算 body 的 CRC，算法与存储层写入时用的那个（{@code UtilAll.crc32}，在 CommitLog.java:780，
+     * 包私有、本测试够不着）逐字一致：{@code java.util.zip.CRC32} 的值截成【有符号 int】。
+     * 刻意不复用生产的 CRC 实现类（MessageCodec 里的记录级 crc32 是另一套），这样"复算"才算独立。
+     */
+    private static int crc32Of(byte[] body) {
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(body);
+        return (int) crc.getValue();
     }
 
     private String storeRoot(String sub) {
