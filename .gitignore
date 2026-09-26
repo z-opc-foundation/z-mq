@@ -36,3 +36,7 @@ coverage/
 
 # ===== Git 本地备份目录 (历史塌缩用) =====
 .git.bak.*/
+
+# flatten-maven-plugin 常开：每次本地构建在根和各模块目录留下展平后的 pom
+*.flattened-pom.xml
+.flattened-pom.xml
