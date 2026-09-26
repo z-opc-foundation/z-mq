@@ -188,6 +188,87 @@ public class ConsumerOffsetWiringGuardTest {
                 "不存在的针必须 0 命中, 否则命中数没有意义: " + absent.describeHits());
     }
 
+    // ==================== 6. 提交失败这笔账必须有出口（结构断言，不是文本扫"有没有这行"） ====================
+
+    /**
+     * push 消费者的提交失败是「只告警、不掐拉取循环」的（at-least-once 的理由站得住），但只告警就意味着
+     * <b>代价没有出口</b>：这一条把「catch 分支里不许只有 log」做成机检 ——
+     * ① 那一次失败必须被记进 {@code offsetCommitFailures}；
+     * ② 告警也得留在原处（计数给读数、告警给人，是本笔账的两半，缺一半都算红）；
+     * ③ 记的那个字段必须真是 {@code AtomicLong}，并且有一个 public getter 读的就是<b>同一个字段</b>
+     *    （「bump 一个字段、getter 返回另一个常量」这种糊法在③上过不去）。
+     * <p>
+     * 全部命中都过 {@link #isProse(String)}：把真调用注释掉、只剩一句散文，这一条必须红 ——
+     * 反证见工单 §4 的 CP-A/CP-C。
+     */
+    @Test
+    @DisplayName("§4 守卫升级: commitOffsetThrough 的 catch 分支里不许只有 log —— 计数必须被 bump, 且 bump 的就是 getter 读的那个字段")
+    public void commitFailureCatchBranchBumpsAReadableCounter() throws IOException {
+        File src = pushConsumerSource();
+
+        List<String> branch = catchBranchOfCommitOffsetThrough(src);
+        assertFalse(branch.isEmpty(),
+                "没能从 DefaultMQPushConsumer.java 里定位到 commitOffsetThrough 的那个 catch 分支"
+                        + "（方法改名、或 catch 换成了 throws / 花括号配不上都算）⇒ 这条边无从机检");
+
+        int bump = countCodeLines(branch, "offsetCommitFailures.incrementAndGet()");
+        assertEquals(1, bump,
+                "★ catch 分支里必须真的把这一笔失败记进计数（注释里写一句不算读者）, 实测命中="
+                        + bump + " ; 分支内容=" + join(branch));
+
+        int warned = countCodeLines(branch, "log.warn(\"commit consumer offset failed");
+        assertEquals(1, warned,
+                "★ 同一分支的告警也不许摘干净（摘掉日志、只留计数同样是红 —— 两条出口各自有测试负责）,"
+                        + " 实测命中=" + warned + " ; 分支内容=" + join(branch));
+
+        // 记的必须是一个跨线程读得安全的计数器
+        Scan field = scanModules(false, "private final AtomicLong offsetCommitFailures = new AtomicLong();");
+        report("AtomicLong offsetCommitFailures 字段", field);
+        assertTrue(field.touchesFile("DefaultMQPushConsumer.java"),
+                "那位计数必须是 push 消费者自己的 AtomicLong 字段（拉取线程写、别的线程读）: "
+                        + field.describeHits());
+
+        // 出口必须存在, 且读的就是那一个字段
+        Scan getter = scanModules(false, "public long getOffsetCommitFailures()");
+        report("public long getOffsetCommitFailures()", getter);
+        assertTrue(getter.touchesFile("DefaultMQPushConsumer.java"),
+                "计数量要有一个 public 出口, 否则 §1.6 那条教训（计了数没人读得到）原样留着: "
+                        + getter.describeHits());
+        List<String> getterBody = methodBodyLines(src, "public long getOffsetCommitFailures()");
+        assertFalse(getterBody.isEmpty(), "getter 的方法体取不出来 ⇒ 结构变了, 这条守卫无从判定");
+        assertEquals(1, countCodeLines(getterBody, "return offsetCommitFailures.get();"),
+                "getter 读的就是 bump 的那一个字段（不许返回常量、也不许读另一个字段）: " + join(getterBody));
+    }
+
+    // ==================== 7. 那个出口必须有读者（读者在测试树里） ====================
+
+    @Test
+    @DisplayName("§4 守卫升级: 提交失败计数在 src/main 里不许有业务读者, 但在测试树里必须有读者, 且那位读者断的是 broker 的读数")
+    public void commitFailureCounterIsObservedOnlyByTests() throws IOException {
+        // 与 DeadLetterQueue 的两个计数同形: 只服务观测, 不参与业务路径 —— src/main 里除声明文件外零读者
+        Scan main = scanModules(false, "getOffsetCommitFailures()");
+        report("src/main 里的 getOffsetCommitFailures()", main);
+        assertEquals(0, main.excludingFiles("DefaultMQPushConsumer.java").hitLines,
+                "这个计数一旦被业务路径读, 它就变成第二位真相了（先例见 DeadLetterQueue 的同一条口径）: "
+                        + main.describeHits());
+
+        Scan tests = scanTestTree("z-mq-broker", "getOffsetCommitFailures()");
+        report("测试树里的 getOffsetCommitFailures()", tests);
+        assertTrue(tests.touchesFile("PushOffsetCommitE2ETest.java"),
+                "★ 计了数而永远没有测试走那条路 = §1.6 早先那个反面形状; 出口必须有读者: "
+                        + tests.describeHits());
+        assertTrue(tests.hitLines >= 3,
+                "读者不许只瞄一眼: 「起点是 0」「变正」「第二批复涨」三段都要有读数, 实测=" + tests.hitLines
+                        + " ; 命中=" + tests.describeHits());
+
+        // 同一支 E2E 的承重判据必须落在 broker 的读数上, 否则 §1.2 那种假绿又回来了
+        Scan judge = scanTestTree("z-mq-broker", "getConsumerOffsetManager().queryOffset(");
+        report("E2E 里的 broker 侧读数", judge);
+        assertTrue(judge.touchesFile("PushOffsetCommitE2ETest.java"),
+                "push 提交的行为测必须断 broker 的 ConsumerOffsetManager 的读数（进程内缓存在 RPC 之前就写了）: "
+                        + judge.describeHits());
+    }
+
     // ==================== 扫描工具 ====================
 
     private static void report(String needle, Scan scan) {
@@ -291,6 +372,123 @@ public class ConsumerOffsetWiringGuardTest {
     private static boolean isProse(String line) {
         String t = line.trim();
         return t.startsWith("*") || t.startsWith("/*") || t.startsWith("//");
+    }
+
+    /**
+     * 扫某个模块的 src/test（要量的是"这件事有没有读者"时, 读者在测试树里, src/main 量不到）。
+     * 与 src/main 那把尺共用 {@link #walk} 与 {@link #isProse(String)} —— 散文照样不算读者。
+     */
+    private static Scan scanTestTree(String moduleName, String needle) throws IOException {
+        File repoRoot = resolveRepoRoot();
+        File srcTest = new File(repoRoot, moduleName + File.separator + "src" + File.separator + "test");
+        if (!srcTest.isDirectory()) {
+            throw new IOException("没有 src/test 目录: " + srcTest.getAbsolutePath());
+        }
+        Scan scan = new Scan(needle);
+        walk(srcTest, scan);
+        return scan;
+    }
+
+    /** push 消费者的源文件：结构断言只认这一个真相文件. */
+    private static File pushConsumerSource() {
+        File file = new File(resolveRepoRoot(), "z-mq-client" + File.separator + "src" + File.separator
+                + "main" + File.separator + "java" + File.separator + "com" + File.separator + "zifang"
+                + File.separator + "z" + File.separator + "mq" + File.separator + "client" + File.separator
+                + "consumer" + File.separator + "DefaultMQPushConsumer.java");
+        assertTrue(file.isFile(), "找不到 push 消费者的源文件: " + file.getAbsolutePath());
+        return file;
+    }
+
+    /**
+     * 从签名那一行往下取出它那个方法体的原始行（花括号配对定界）。
+     * 定位不到、或花括号配不上（改成了 {@code throws}、把方法拆了）时返回空表 ——
+     * 让"结构变了"表现为守卫<b>红</b>，而不是表现为一个漂亮的通过。
+     */
+    private static List<String> methodBodyLines(File file, String signatureNeedle) throws IOException {
+        List<String> lines = readLines(file);
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (isProse(line) || !line.contains(signatureNeedle)) {
+                continue;
+            }
+            return blockStartingAt(lines, i, 60);
+        }
+        return new ArrayList<String>();
+    }
+
+    /** 取 {@code commitOffsetThrough} 里那个 catch 分支的原始行；取不出来返回空表. */
+    private static List<String> catchBranchOfCommitOffsetThrough(File file) throws IOException {
+        List<String> body = methodBodyLines(file, "private void commitOffsetThrough(");
+        for (int i = 0; i < body.size(); i++) {
+            String line = body.get(i);
+            if (isProse(line) || !line.trim().contains("catch (")) {
+                continue;
+            }
+            return blockStartingAt(body, i, body.size() - i);
+        }
+        return new ArrayList<String>();
+    }
+
+    /** 从 {@code startIdx} 那行的第一个左花括号起, 收到配对的那个右花括号止. */
+    private static List<String> blockStartingAt(List<String> lines, int startIdx, int window) {
+        String first = stripStringLiterals(lines.get(startIdx));
+        int braceAt = first.indexOf('{');
+        if (braceAt < 0 || window <= 0) {
+            return new ArrayList<String>();
+        }
+        List<String> out = new ArrayList<String>();
+        int depth = 0;
+        int end = Math.min(lines.size(), startIdx + window);
+        for (int i = startIdx; i < end; i++) {
+            String chunk = stripStringLiterals(i == startIdx ? lines.get(i).substring(braceAt) : lines.get(i));
+            out.add(lines.get(i));
+            for (int c = 0; c < chunk.length(); c++) {
+                char ch = chunk.charAt(c);
+                if (ch == '{') {
+                    depth++;
+                } else if (ch == '}') {
+                    depth--;
+                }
+            }
+            if (depth == 0) {
+                return out;
+            }
+        }
+        return new ArrayList<String>(); // 没配上：让守卫红, 不要假装量到了
+    }
+
+    /** 一组行里有几行是<b>代码</b>（不是散文）且含那根针. */
+    private static int countCodeLines(List<String> lines, String needle) {
+        int n = 0;
+        for (String line : lines) {
+            if (!isProse(line) && line.contains(needle)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** 诊断用：把取到的分支原样挤成一行. */
+    private static String join(List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            sb.append(line.trim()).append(" | ");
+        }
+        return sb.toString();
+    }
+
+    /** 数花括号之前先把双引号里的内容抹掉（日志模板里那串 {@code {}} 不是代码块）. */
+    private static String stripStringLiterals(String line) {
+        return line.replaceAll("\"[^\"]*\"", "\"\"");
+    }
+
+    private static List<String> readLines(File file) throws IOException {
+        String text = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        List<String> out = new ArrayList<String>();
+        for (String line : text.split("\r?\n", -1)) {
+            out.add(line);
+        }
+        return out;
     }
 
     /** 一个 src/main 文件对某根针的命中读数. */

@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 推模式消费者（对标 RocketMQ DefaultMQPushConsumer）.
@@ -71,6 +72,12 @@ public class DefaultMQPushConsumer {
      * 已提交位点决定起点（接线前这里是 {@code computeIfAbsent(mq, k -> 0L)}, 也就是每个新进程都从 0 重放）。
      */
     private final Map<MessageQueue, Long> offsetTable = new ConcurrentHashMap<>();
+    /**
+     * 位点提交失败的次数：提交失败只告警、不打断拉取循环（理由见 {@link #commitOffsetThrough}），
+     * 而"只告警"这件事要让外面读得到，否则代价只剩一行日志。
+     * 与 {@code DeadLetterQueue} 的两个计数同形：只服务观测，不参与任何业务路径。
+     */
+    private final AtomicLong offsetCommitFailures = new AtomicLong();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ScheduledExecutorService pullExecutor;
     private MessageListener listener;
@@ -327,7 +334,9 @@ public class DefaultMQPushConsumer {
      *       {@link #handleConsumeFailure}。两句话合起来才是 at-least-once：一条消息至少被投一次、
      *       但投出去的后继只有一份在推进它。</li>
      *   <li>提交失败只告警、不打断拉取循环：本地缓存已经推进，消息不会因此丢；
-     *       真正的保护是"下一次成功提交会带上更靠后的位点"。静默的代价记在日志里，不记在断言里。</li>
+     *       真正的保护是"下一次成功提交会带上更靠后的位点"。告警记在日志里，笔数记在
+     *       {@link #offsetCommitFailures} 里，外面用 {@link #getOffsetCommitFailures()} 读得到 ——
+     *       一位提交没出去，光靠日志以外的读数也应该看得出来。</li>
      * </ul>
      */
     private void commitOffsetThrough(String brokerAddr, MessageQueue mq, long nextOffset) {
@@ -336,6 +345,7 @@ public class DefaultMQPushConsumer {
             ConsumerOffsetRequests.sendOffsetCommit(mqClientInstance, brokerAddr, mq.getTopic(),
                     mq.getQueueId(), consumerGroup, nextOffset);
         } catch (Exception e) {
+            offsetCommitFailures.incrementAndGet();
             log.warn("commit consumer offset failed: group={} mq={} offset={} err={}",
                     consumerGroup, mq, nextOffset, e.getMessage());
         }
@@ -407,6 +417,20 @@ public class DefaultMQPushConsumer {
     public long getOffset(MessageQueue mq) {
         Long v = offsetTable.get(mq);
         return v == null ? 0L : v;
+    }
+
+    /**
+     * 这个消费者实例上「listener 回了成功、但位点提交给 broker 这一步抛了」的笔数。
+     * <p>
+     * 它只服务观测：提交失败不阻断拉取循环（at-least-once 的理由见 {@link #commitOffsetThrough}），
+     * 所以「有没有失败过」这件事在业务路径上是不可见的 —— 没有这个出口就只能靠翻日志。
+     * 读它之前先明白另一件事：{@code 0} 只说明本实例没抛过，不代表 broker 上那位是新的；
+     * 位点的真相在 broker 的 {@code ConsumerOffsetManager} 那一侧。
+     *
+     * @return 累计提交失败的笔数（单调不减, 关机也不清零）
+     */
+    public long getOffsetCommitFailures() {
+        return offsetCommitFailures.get();
     }
 
     /**
