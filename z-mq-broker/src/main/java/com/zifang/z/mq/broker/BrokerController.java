@@ -277,8 +277,10 @@ public class BrokerController {
         // 为什么半消息绑 201 而不是复用 200：200 已经绑给 SendMessageProcessor，那条路径把消息按业务
         // topic 直接写进存储、对消费者立刻可见。让"提交前不该可见"的半消息也走 200，就等于要求两个
         // 处理器在同一条码上分诊 —— 分错一次的后果是同一条消息既以半消息又以业务 topic 落进存储两次。
-        // 201 在 src/main 里今天零发送方（DefaultMQProducer.send 一律发 200），所以绑上它不会改道任何
-        // 既有发送；这个"不改道"由 TransactionHalfMessageIsolationTest 钉住。
+        // 201 在 src/main 里的发送方只有事务 producer 的 prepare 阶段（TransactionMQProducer 把半消息
+        // 显式发成 SEND_MESSAGE_V2）；普通发送一律 200，所以绑上 201 不会改道任何既有发送 ——
+        // 这条"不改道"由 TransactionMessageE2ETest#ordinarySendIsNotDivertedByTheTransactionRegistration
+        // 钉住，同一支用例里真发一条 201 作正对照（半消息计数必须涨）。
         this.transactionMessageProcessor = new com.zifang.z.mq.broker.processor.TransactionMessageProcessor(this);
         this.remotingServer.registerProcessor(
                 RequestCode.SEND_MESSAGE_V2, this.transactionMessageProcessor, this.sendMessageExecutor);

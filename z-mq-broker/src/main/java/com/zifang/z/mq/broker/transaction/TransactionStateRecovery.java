@@ -19,8 +19,9 @@ import java.util.List;
  *   <li>{@code transactionId} 在 {@code MessageCodec} 里没有自己的编码列，但它跟着
  *       properties 那一坨整体落盘、整体读回（{@code MessageCodec#collectProperties} 与解码侧对称），
  *       所以"这条半消息属于哪个事务、它背后的业务 topic/队列是什么"在重启后都还认得；</li>
- *   <li>{@code preparedTransactionOffset} 那一列在 src/main 里至今没有任何写入方，
- *       要让它成为抓手就得动存储模块，那不在本模块的射程里。</li>
+ *   <li>{@code preparedTransactionOffset} 本支起在 {@code toInner} 里随半消息一起带走，
+ *       {@code MessageCodec} 那列也确实会编码落盘、解码读回；但重放路径仍不拿它当抓手——
+ *       那要的是"从存储偏移直接定位半消息"，得动存储模块的扫描侧，不在本模块的射程里。</li>
  * </ul>
  * 扫描顺序是先 op 后半消息：已经定论的事务不该再被收进待回查集合（反序也一样能收敛，
  * 因为 {@link TransactionStateManager#recoverHalfMessage} 自己会再看一眼 resolved 表）。
