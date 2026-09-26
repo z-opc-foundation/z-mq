@@ -35,6 +35,9 @@ public class BrokerControllerTest {
 
         messageStoreConfig = new MessageStoreConfig();
         messageStoreConfig.setStorePathRootDir(tempDir.resolve("store").toString());
+        // commitlog 有独立的默认路径（~/store/commitlog），只设 rootDir 会让数据写到 TempDir 之外
+        messageStoreConfig.setStorePathCommitLog(
+                tempDir.resolve("store").resolve("commitlog").toString());
 
         nettyServerConfig = new NettyServerConfig();
         nettyServerConfig.setListenPort(10911);

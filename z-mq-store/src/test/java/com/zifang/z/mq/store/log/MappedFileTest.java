@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.RandomAccessFile;
 import java.nio.MappedByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -61,16 +62,31 @@ public class MappedFileTest {
         int fileSize = 1024 * 1024;
         mappedFile = new MappedFile(testFile.getAbsolutePath(), fileSize);
 
-        // Write some data
-        MappedByteBuffer buffer = mappedFile.getMappedByteBuffer();
         byte[] data = "Test data for flush".getBytes(StandardCharsets.UTF_8);
-        buffer.put(data);
+        // 走真正的追加路径（推进 wrotePosition），不再用 getMappedByteBuffer().put() 绕位点
+        assertTrue(mappedFile.appendMessage(data), "appendMessage 应成功");
 
-        // Flush the data
-        int flushed = mappedFile.flush(0);
+        // 刷盘前 flushedPosition 必须还是 0
+        assertEquals(0, mappedFile.getFlushedPosition(), "未刷盘时 flushedPosition 应为 0");
 
-        // Flush returns flushed position
-        assertTrue(flushed >= 0);
+        // 真刷盘：fileChannel.force(false) 成功才把 flushedPosition 推到 wrotePosition
+        assertTrue(mappedFile.flush(0), "flush 应返回 true");
+        assertEquals(data.length, mappedFile.getFlushedPosition(),
+                "刷盘成功后 flushedPosition 应等于 wrotePosition");
+
+        // 换一个句柄从盘上读回同样的字节，证明不是只改了内存计数
+        RandomAccessFile raf = new RandomAccessFile(testFile, "r");
+        try {
+            byte[] onDisk = new byte[data.length];
+            raf.readFully(onDisk);
+            assertArrayEquals(data, onDisk);
+        } finally {
+            raf.close();
+        }
+
+        // 没有增量时 flush 是 no-op，且不会把位点弄错
+        assertTrue(mappedFile.flush(0));
+        assertEquals(data.length, mappedFile.getFlushedPosition());
     }
 
     @Test

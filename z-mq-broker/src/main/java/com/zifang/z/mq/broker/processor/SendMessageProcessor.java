@@ -79,15 +79,29 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
         PutMessageResult result = commitLog.putMessage(inner);
         // 构造 SendResult
         SendResult sendResult = new SendResult();
+        AppendMessageResult amr = result.getAppendMessageResult();
         if (result.isOk()) {
             sendResult.setSendStatus(SendStatus.SEND_OK);
-            AppendMessageResult amr = result.getAppendMessageResult();
             if (amr != null) {
                 sendResult.setMsgId(inner.getMsgId());
                 sendResult.setTopic(topic);
                 sendResult.setQueueId(queueId);
                 sendResult.setQueueOffset(amr.getWroteOffset());
             }
+        } else if (result.getPutMessageStatus() == PutMessageStatus.FLUSH_DISK_TIMEOUT
+                && amr != null && amr.getStatus() == AppendMessageResult.AppendMessageStatus.PUT_OK) {
+            // 同步刷盘超时会带合法的 AppendMessageResult：记录已经进存储（后续 force / 关机刷盘会落住），
+            // 但"已落盘"没有兑现。这里必须把 FLUSH_DISK_TIMEOUT 原样塞进响应体的 SendResult ——
+            // 客户端 toSendResult() 在 code==SUCCESS 时直接采用响应体里的 SendStatus，
+            // 所以这条状态码就这样传到生产者（工单 T2：不许"广告了但没接线"）。
+            sendResult.setSendStatus(SendStatus.FLUSH_DISK_TIMEOUT);
+            sendResult.setMsgId(inner.getMsgId());
+            sendResult.setTopic(topic);
+            sendResult.setQueueId(queueId);
+            sendResult.setQueueOffset(amr.getWroteOffset());
+            sendResult.setErrorMsg(PutMessageStatus.FLUSH_DISK_TIMEOUT.name());
+            log.error("sync flush timeout, respond FLUSH_DISK_TIMEOUT to producer, topic={} queueId={} msgId={}",
+                    topic, queueId, inner.getMsgId());
         } else {
             sendResult.setSendStatus(SendStatus.SEND_FAILED);
             sendResult.setErrorMsg(result.getPutMessageStatus().name());

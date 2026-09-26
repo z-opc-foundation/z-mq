@@ -8,6 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -83,35 +86,62 @@ public class DefaultMQProducerTest {
         });
     }
 
+    /**
+     * 真异步语义（W3 §5 改写）。
+     * <p>
+     * 旧断言是"send() 返回时 exceptionCaught 已经为 true"，也就是把 send(msg, callback)
+     * 当成当场同步回调 —— 那正是这条 API 广告却没兑现的东西，所以按新语义重写：
+     * <ol>
+     *   <li>未 start 且 callback 为 null ⇒ 当场抛（没有回调就没有异步可言）；</li>
+     *   <li>未 start 且带 callback ⇒ send() 不抛，失败在<b>别的线程</b>上交付给 onException；</li>
+     *   <li>交付用 CountDownLatch 等，不用 sleep、也不拿挂钟时长当阈值。</li>
+     * </ol>
+     */
     @Test
-    public void testSendAsyncWithoutStart() {
+    public void testSendAsyncWithoutStart() throws Exception {
         // Create a message
         Message message = new Message();
         message.setTopic("TestTopic");
         message.setBody("TestBody".getBytes(StandardCharsets.UTF_8));
 
-        // 异步发送不带 callback 时应当抛出异常
+        // (1) 异步发送不带 callback 时应当抛出异常
         assertThrows(Exception.class, () -> {
             producer.send(message, (SendCallback) null);
         });
 
-        // 带 callback 时不应抛，而是把异常交给 callback 处理
-        final boolean[] exceptionCaught = {false};
-        try {
-            producer.send(message, new SendCallback() {
-                @Override
-                public void onSuccess(SendResult sendResult) {
-                }
+        // (2) 带 callback 时不应抛，而是把异常交给 callback 处理
+        final CountDownLatch delivered = new CountDownLatch(1);
+        final AtomicReference<Throwable> caught = new AtomicReference<Throwable>();
+        final AtomicReference<String> callbackThread = new AtomicReference<String>();
+        final AtomicReference<Thread> callerThread = new AtomicReference<Thread>();
 
-                @Override
-                public void onException(Throwable e) {
-                    exceptionCaught[0] = true;
-                }
-            });
-        } catch (Exception ignored) {
-            // 异步 + callback 不应抛
-        }
-        assertTrue(exceptionCaught[0], "callback should receive exception");
+        producer.send(message, new SendCallback() {
+            @Override
+            public void onSuccess(SendResult sendResult) {
+                throw new AssertionError("send without start must not report success");
+            }
+
+            @Override
+            public void onException(Throwable e) {
+                caught.set(e);
+                callbackThread.set(Thread.currentThread().getName());
+                callerThread.set(Thread.currentThread());
+                delivered.countDown();
+            }
+        });
+
+        // (3) 回调必须发生，且不在调用线程上
+        assertTrue(delivered.await(10, TimeUnit.SECONDS),
+                "async send must deliver its failure to the callback");
+        assertNotNull(caught.get(), "callback should receive exception");
+        assertTrue(caught.get() instanceof IllegalStateException,
+                "not-started producer must report IllegalStateException, got " + caught.get());
+        assertNotSame(Thread.currentThread(), callerThread.get(),
+                "callback must not run on the calling thread");
+        assertFalse(Thread.currentThread().getName().equals(callbackThread.get()),
+                "callback must not run on the calling thread, ran on " + callbackThread.get());
+        assertTrue(callbackThread.get().startsWith("NettyClientPublicExecutor_"),
+                "callback must run on the remoting callbackExecutor, ran on " + callbackThread.get());
     }
 
     @Test

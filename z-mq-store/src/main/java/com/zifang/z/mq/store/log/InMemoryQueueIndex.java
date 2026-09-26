@@ -1,30 +1,68 @@
 package com.zifang.z.mq.store.log;
 
-import com.zifang.z.mq.common.message.MessageExt;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 进程内 Queue 索引 — 给 MVP CommitLog 提供轻量级的 (topic, queueId) -> 消息列表 索引。
+ * 进程内 Queue <b>位点</b>索引 — 只持有 {@code queueOffset -> (commitLogOffset, size)}，不持有消息体。
  * <p>
- * 真实的 RocketMQ 用 ConsumeQueue + IndexFile 双层索引, 在 CommitLog 写入时通过 ReputMessageService
- * 异步构建。这里直接同步建索引, 用 ConcurrentHashMap + AtomicLong 保证并发安全。
+ * W1 之前这里是 {@code ConcurrentMap<Long, MessageExt>}，整条消息（含 body）常驻堆里：
+ * 读路径根本不碰盘，堆随消息量单调增长。现在读消息必须走
+ * {@link CommitLog#pullMessage(String, int, long, int)} → {@code MappedFile.selectMappedBuffer} → 解码。
  * <p>
- * 内存占用: 每条消息约 200B (元信息), 100万条消息约 200MB。可配置上限。
+ * 内存占用：每条位点约 48B（Entry + skip-list 节点），100 万条约 50MB。可配置上限（按条目数淘汰）。
  *
  * <p><b>线程安全:</b> 所有公开方法均线程安全, 内部状态用 ConcurrentHashMap + AtomicLong。
  */
 public class InMemoryQueueIndex {
 
-    /** 单个 (topic, queueId) 索引条目, 持有按 offset 顺序排列的消息列表与下一个 offset 计数器。 */
+    /** 一条位点：消息在 CommitLog 里的物理位置与长度。 */
+    public static final class Entry {
+        private final long queueOffset;
+        private final long commitLogOffset;
+        private final int size;
+
+        Entry(long queueOffset, long commitLogOffset, int size) {
+            this.queueOffset = queueOffset;
+            this.commitLogOffset = commitLogOffset;
+            this.size = size;
+        }
+
+        public long getQueueOffset() {
+            return queueOffset;
+        }
+
+        public long getCommitLogOffset() {
+            return commitLogOffset;
+        }
+
+        /** 记录在 CommitLog 中的物理长度（字节）。 */
+        public int getSize() {
+            return size;
+        }
+
+        @Override
+        public String toString() {
+            return "Entry{queueOffset=" + queueOffset + ", commitLogOffset=" + commitLogOffset
+                    + ", size=" + size + '}';
+        }
+    }
+
+    /**
+     * 单个 (topic, queueId) 的位点表。
+     * <p>
+     * {@code byOffset} 用跳表层保证按 queueOffset 有序遍历（老实现的 HashMap 表 + 逐 offset 试探
+     * 在淘汰后会出现空洞）；{@code nextOffset} 是该队列的下一个待分配 queueOffset。
+     */
     public static final class QueueEntry {
         private final String topic;
         private final int queueId;
-        private final ConcurrentMap<Long, MessageExt> byOffset = new ConcurrentHashMap<>();
+        private final ConcurrentMap<Long, Entry> byOffset = new ConcurrentSkipListMap<>();
         private final AtomicLong nextOffset = new AtomicLong(0L);
 
         QueueEntry(String topic, int queueId) {
@@ -32,14 +70,25 @@ public class InMemoryQueueIndex {
             this.queueId = queueId;
         }
 
-        public String getTopic() { return topic; }
-        public int getQueueId() { return queueId; }
-        public long getNextOffset() { return nextOffset.get(); }
-        public int getSize() { return byOffset.size(); }
+        public String getTopic() {
+            return topic;
+        }
+
+        public int getQueueId() {
+            return queueId;
+        }
+
+        public long getNextOffset() {
+            return nextOffset.get();
+        }
+
+        public int getSize() {
+            return byOffset.size();
+        }
     }
 
     private final ConcurrentMap<String, QueueEntry> entries = new ConcurrentHashMap<>();
-    /** 每个 (topic, queueId) 最多保留多少条消息, 0 表示不限制。 */
+    /** 每个 (topic, queueId) 最多保留多少条位点, 0 表示不限制。 */
     private final int maxPerQueue;
 
     public InMemoryQueueIndex() {
@@ -59,40 +108,60 @@ public class InMemoryQueueIndex {
     }
 
     /**
-     * 追加一条消息, 分配单调递增的 queueOffset, 返回分配结果。
+     * 分配该队列的下一个 queueOffset（单调递增，与物理写入顺序在同一把锁里配对）。
      */
-    public MessageExt append(String topic, int queueId, MessageExt msg) {
-        QueueEntry entry = getOrCreateEntry(topic, queueId);
-        long offset = entry.nextOffset.getAndIncrement();
-        msg.setQueueOffset(offset);
-        msg.setQueueId(queueId);
-        entry.byOffset.put(offset, msg);
-        // 简单 LRU: 超限时移除最早的条目
-        if (maxPerQueue > 0 && entry.byOffset.size() > maxPerQueue) {
-            entry.byOffset.entrySet().removeIf(e -> e.getKey() < entry.nextOffset.get() - maxPerQueue);
-        }
-        return msg;
+    public long allocateOffset(String topic, int queueId) {
+        return getOrCreateEntry(topic, queueId).nextOffset.getAndIncrement();
     }
 
     /**
-     * 查询从指定 offset 开始的最多 maxNum 条消息。
+     * 登记一条位点。{@code queueOffset} 必须是 {@link #allocateOffset} 给出的值，
+     * 或者是恢复扫描从盘上读到的值（后者会把 nextOffset 抬到 {@code queueOffset + 1}）。
      *
-     * @return 列表按 offset 升序排列; 若 offset 超出范围返回空列表
+     * @return 登记的条目
      */
-    public List<MessageExt> query(String topic, int queueId, long offset, int maxNum) {
+    public Entry appendEntry(String topic, int queueId, long queueOffset, long commitLogOffset, int size) {
+        QueueEntry entry = getOrCreateEntry(topic, queueId);
+        Entry value = new Entry(queueOffset, commitLogOffset, size);
+        entry.byOffset.put(queueOffset, value);
+        long current = entry.nextOffset.get();
+        while (queueOffset >= current) {
+            if (entry.nextOffset.compareAndSet(current, queueOffset + 1)) {
+                break;
+            }
+            current = entry.nextOffset.get();
+        }
+        // 按条目数淘汰最早的位点（不再是"整条消息留在堆里"）
+        if (maxPerQueue > 0 && entry.byOffset.size() > maxPerQueue) {
+            long floor = entry.nextOffset.get() - maxPerQueue;
+            entry.byOffset.keySet().removeIf(off -> off < floor);
+        }
+        return value;
+    }
+
+    /**
+     * 查询从指定 offset 开始的最多 maxNum 条位点。
+     *
+     * @return 列表按 queueOffset 升序排列; 若 offset 超出范围返回空列表
+     */
+    public List<Entry> queryEntries(String topic, int queueId, long offset, int maxNum) {
         QueueEntry entry = entries.get(key(topic, queueId));
-        if (entry == null || offset >= entry.nextOffset.get()) {
+        if (entry == null || offset >= entry.nextOffset.get() || maxNum <= 0) {
             return new ArrayList<>();
         }
-        List<MessageExt> result = new ArrayList<>();
-        long end = Math.min(offset + maxNum, entry.nextOffset.get());
-        for (long off = offset; off < end; off++) {
-            MessageExt m = entry.byOffset.get(off);
-            if (m != null) {
-                result.add(m);
+        List<Entry> result = new ArrayList<>();
+        // skipList 的 tailMap 天然按 offset 升序
+        for (Map.Entry<Long, Entry> e : ((ConcurrentSkipListMap<Long, Entry>) asSkipList(entry.byOffset)).tailMap(offset).entrySet()) {
+            if (result.size() >= maxNum) {
+                break;
             }
+            result.add(e.getValue());
         }
         return result;
+    }
+
+    private static ConcurrentSkipListMap<Long, Entry> asSkipList(ConcurrentMap<Long, Entry> map) {
+        return (ConcurrentSkipListMap<Long, Entry>) map;
     }
 
     /** 获取队列当前最大 offset (新消息会分配这个值)。 */
@@ -101,7 +170,7 @@ public class InMemoryQueueIndex {
         return entry == null ? 0L : entry.nextOffset.get();
     }
 
-    /** 队列中已索引的消息数量。 */
+    /** 队列中已索引的位点数量。 */
     public int getSize(String topic, int queueId) {
         QueueEntry entry = entries.get(key(topic, queueId));
         return entry == null ? 0 : entry.byOffset.size();

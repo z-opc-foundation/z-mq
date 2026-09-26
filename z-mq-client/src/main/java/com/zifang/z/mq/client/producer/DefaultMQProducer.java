@@ -13,7 +13,10 @@ import com.zifang.z.mq.remoting.exception.RemotingConnectException;
 import com.zifang.z.mq.remoting.exception.RemotingSendRequestException;
 import com.zifang.z.mq.remoting.exception.RemotingTimeoutException;
 import com.zifang.z.mq.remoting.netty.NettyClientConfig;
+import com.zifang.z.mq.remoting.netty.NettyRemotingAbstract;
+import com.zifang.z.mq.remoting.netty.NettyRemotingClient;
 import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
+import com.zifang.z.mq.remoting.netty.ResponseFuture;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
 import org.apache.logging.log4j.LogManager;
@@ -21,6 +24,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.Serializable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -88,36 +93,169 @@ public class DefaultMQProducer {
         validateMessage(message);
         MQClientInstance instance = getOrCreateInstance();
 
+        PreparedSend prepared = prepareSend(instance, message);
+
+        // 同步 RPC
+        RemotingCommand response = instance.invokeSync(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis);
+
+        SendResult result = toSendResult(response, prepared.messageQueue);
+        if (result.getMsgId() == null) {
+            result.setMsgId(prepared.request.getExtField("msgId"));
+        }
+        return result;
+    }
+
+    /**
+     * 单向发送：不关心结果，也不等结果.
+     * <p>
+     * 真走 {@code invokeOneway}：请求被标成 oneway 后 broker 端不会写响应（
+     * {@code NettyRemotingAbstract.processRequestCommand} 对 {@code isOnewayRPC()} 直接跳过响应），
+     * 所以这里绝不能再用 invokeSync —— 那等于每次 oneway 都阻塞满 sendMsgTimeoutMillis
+     * 再抛 RemotingTimeoutException。oneway 的许可是即借即还的，不占响应表位。
+     */
+    public void sendOneway(Message message) throws Exception {
+        if (message == null) {
+            throw new IllegalArgumentException("message is null");
+        }
+        if (mqClientInstance == null) {
+            throw new IllegalStateException("producer not started");
+        }
+        validateMessage(message);
+        MQClientInstance instance = getOrCreateInstance();
+
+        PreparedSend prepared = prepareSend(instance, message);
+        instance.invokeOneway(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis);
+    }
+
+    /**
+     * 异步发送：SendCallback 回调结果.
+     * <p>
+     * 真异步：RPC 走 {@code invokeAsync}，onSuccess/onException 由 remoting 层的
+     * callbackExecutor 线程执行，不在调用线程上。RPC 还没发出去就失败（未 start / 无路由 /
+     * 消息非法 / 流控）时，异常同样投递到 callbackExecutor 上报给 callback，
+     * 保证"回调永远在别的线程、绝不当场同步执行"这一条对外语义。
+     */
+    public void send(Message message, SendCallback sendCallback) throws Exception {
+        if (message == null) {
+            throw new IllegalArgumentException("message is null");
+        }
+        if (sendCallback == null) {
+            // 没有回调就没有异步可言：退回同步语义，异常直接抛给调用方
+            send(message);
+            return;
+        }
+        MQClientInstance instance;
+        PreparedSend prepared;
+        try {
+            if (mqClientInstance == null) {
+                throw new IllegalStateException("producer not started");
+            }
+            validateMessage(message);
+            instance = getOrCreateInstance();
+            prepared = prepareSend(instance, message);
+        } catch (Exception preFlightFailure) {
+            dispatchToCallbackExecutor(sendCallback, preFlightFailure);
+            return;
+        }
+
+        final SendCallback callback = sendCallback;
+        final PreparedSend finalPrepared = prepared;
+        instance.invokeAsync(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis,
+                new NettyRemotingAbstract.InvokeCallback() {
+                    @Override
+                    public void operationComplete(ResponseFuture responseFuture) {
+                        Throwable cause = responseFuture.getCause();
+                        if (cause == null && responseFuture.getResponseCommand() == null) {
+                            // 没响应也没异常 ⇒ 只能是被超时扫描摘掉
+                            cause = new RemotingTimeoutException(
+                                    "no response for async send, opaque=" + responseFuture.getOpaque());
+                        }
+                        if (cause != null && responseFuture.getResponseCommand() == null) {
+                            callback.onException(cause);
+                            return;
+                        }
+                        try {
+                            callback.onSuccess(toSendResult(responseFuture.getResponseCommand(),
+                                    finalPrepared.messageQueue));
+                        } catch (Throwable e) {
+                            callback.onException(e);
+                        }
+                    }
+                });
+    }
+
+    /**
+     * 把一个尚未发出的失败交给 callback：投递到 remoting 的 callbackExecutor，
+     * 池不可用（客户端已关闭等）时才退回当前线程，保证"至少交付一次"。
+     */
+    private void dispatchToCallbackExecutor(final SendCallback callback, final Throwable failure) {
+        ExecutorService callbackExecutor = null;
+        try {
+            MQClientInstance instance = getOrCreateInstance();
+            NettyRemotingClient client = instance.getRemotingClient();
+            if (client != null) {
+                callbackExecutor = client.getCallbackExecutor();
+            }
+        } catch (Exception e) {
+            log.warn("cannot resolve callbackExecutor for async send failure", e);
+        }
+
+        if (callbackExecutor == null || callbackExecutor.isShutdown()) {
+            callback.onException(failure);
+            return;
+        }
+        final Throwable toReport = failure;
+        try {
+            callbackExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    callback.onException(toReport);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            log.warn("callbackExecutor rejected pre-flight failure, deliver it here", e);
+            callback.onException(failure);
+        }
+    }
+
+    /**
+     * 组一条 SEND_MESSAGE 请求：路由 → 选队列 → 找 master 地址 → 编码消息体.
+     */
+    private PreparedSend prepareSend(MQClientInstance instance, Message message) throws Exception {
         TopicRouteData routeData = instance.getTopicRouteData(message.getTopic());
         if (routeData == null || routeData.getQueueDatas() == null || routeData.getQueueDatas().isEmpty()) {
             throw new RemotingSendRequestException("No route for topic: " + message.getTopic());
         }
-
-        // 选一个队列
         MessageQueue mq = instance.selectOneMessageQueue(message.getTopic(), routeData);
         if (mq == null) {
             throw new RemotingSendRequestException("No writable queue for topic: " + message.getTopic());
         }
-
-        // 找 master broker 地址
         String brokerAddr = lookupBrokerMasterAddr(routeData, mq.getBrokerName());
         if (brokerAddr == null) {
             throw new RemotingSendRequestException("No master addr for broker: " + mq.getBrokerName());
         }
+        return new PreparedSend(mq, brokerAddr, buildSendRequest(message, mq));
+    }
 
-        // 构造内部消息
+    private RemotingCommand buildSendRequest(Message message, MessageQueue mq) {
         MessageExt inner = buildMessageExt(message, mq);
-
-        // 构造 RemotingCommand
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.SEND_MESSAGE);
+        request.addExtField("msgId", inner.getMsgId());
         request.addExtField("topic", message.getTopic());
         request.addExtField("queueId", String.valueOf(mq.getQueueId()));
         request.addExtField("brokerName", mq.getBrokerName());
         request.setBody(JsonCodec.encode(inner));
+        return request;
+    }
 
-        // 同步 RPC
-        RemotingCommand response = instance.invokeSync(brokerAddr, request, sendMsgTimeoutMillis);
+    /**
+     * 把 broker 响应翻译成 SendResult（同步与异步共用一套口径）.
+     */
+    private SendResult toSendResult(RemotingCommand response) {
+        return toSendResult(response, null);
+    }
 
+    private SendResult toSendResult(RemotingCommand response, MessageQueue mq) {
         SendResult result = new SendResult();
         result.setSendStatus(SendStatus.SEND_OK);
         if (response == null) {
@@ -133,63 +271,29 @@ public class DefaultMQProducer {
             try {
                 SendResult remote = JsonCodec.decode(response.getBody(), SendResult.class);
                 if (remote != null) {
+                    if (remote.getMessageQueue() == null) {
+                        remote.setMessageQueue(mq);
+                    }
                     return remote;
                 }
             } catch (Exception e) {
                 log.warn("decode send result failed, use local", e);
             }
         }
+        result.setMessageQueue(mq);
         return result;
     }
 
-    /**
-     * 单向发送：不关心结果.
-     */
-    public void sendOneway(Message message) throws Exception {
-        if (message == null) {
-            throw new IllegalArgumentException("message is null");
-        }
-        if (mqClientInstance == null) {
-            throw new IllegalStateException("producer not started");
-        }
-        MQClientInstance instance = getOrCreateInstance();
-        TopicRouteData routeData = instance.getTopicRouteData(message.getTopic());
-        if (routeData == null || routeData.getQueueDatas() == null || routeData.getQueueDatas().isEmpty()) {
-            throw new RemotingSendRequestException("No route for topic: " + message.getTopic());
-        }
-        MessageQueue mq = new MessageQueue(message.getTopic(),
-                routeData.getQueueDatas().get(0).getBrokerName(), 0);
-        String brokerAddr = lookupBrokerMasterAddr(routeData, mq.getBrokerName());
-        if (brokerAddr == null) {
-            throw new RemotingSendRequestException("No master addr for broker: " + mq.getBrokerName());
-        }
-        MessageExt inner = buildMessageExt(message, mq);
-        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.SEND_MESSAGE);
-        request.markOnewayRPC();
-        request.addExtField("topic", message.getTopic());
-        request.addExtField("queueId", String.valueOf(mq.getQueueId()));
-        request.addExtField("brokerName", mq.getBrokerName());
-        request.setBody(JsonCodec.encode(inner));
-        RemotingCommand response = instance.invokeSync(brokerAddr, request, sendMsgTimeoutMillis);
-        // Oneway 也不应等响应，但我们这里依旧走 invokeSync，broker 端会按 oneway 处理
-    }
+    /** 一次发送的预备结果：选中的队列、目标地址与已编码的请求. */
+    private static class PreparedSend {
+        private final MessageQueue messageQueue;
+        private final String brokerAddr;
+        private final RemotingCommand request;
 
-    /**
-     * 异步发送：SendCallback 回调结果.
-     */
-    public void send(Message message, SendCallback sendCallback) throws Exception {
-        MQClientInstance instance = getOrCreateInstance();
-        try {
-            SendResult result = send(message);
-            if (sendCallback != null) {
-                sendCallback.onSuccess(result);
-            }
-        } catch (Exception e) {
-            if (sendCallback != null) {
-                sendCallback.onException(e);
-            } else {
-                throw e;
-            }
+        PreparedSend(MessageQueue messageQueue, String brokerAddr, RemotingCommand request) {
+            this.messageQueue = messageQueue;
+            this.brokerAddr = brokerAddr;
+            this.request = request;
         }
     }
 

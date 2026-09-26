@@ -7,7 +7,9 @@ import com.zifang.z.mq.remoting.exception.RemotingConnectException;
 import com.zifang.z.mq.remoting.exception.RemotingException;
 import com.zifang.z.mq.remoting.exception.RemotingSendRequestException;
 import com.zifang.z.mq.remoting.exception.RemotingTimeoutException;
+import com.zifang.z.mq.remoting.exception.RemotingTooMuchRequestException;
 import com.zifang.z.mq.remoting.netty.NettyClientConfig;
+import com.zifang.z.mq.remoting.netty.NettyRemotingAbstract;
 import com.zifang.z.mq.remoting.netty.NettyRemotingClient;
 import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
@@ -242,6 +244,66 @@ public class MQClientInstance {
             throw new RemotingConnectException(addr);
         }
         return invokeAndTranslateException(channel, request, timeoutMillis);
+    }
+
+    /**
+     * 单向 RPC：只把请求写出去，不等响应、不占响应表位.
+     * <p>
+     * 请求必须带 oneway 标记，否则 broker 端会照常回响应，那条响应就成了
+     * "收到但没人等的响应"（processResponseCommand 只会打一条 warn）。
+     */
+    public void invokeOneway(String addr, RemotingCommand request, long timeoutMillis)
+            throws RemotingConnectException, InterruptedException, Exception {
+        Channel channel = getOrCreateBrokerChannel(addr);
+        if (channel == null) {
+            throw new RemotingConnectException(addr);
+        }
+        request.markOnewayRPC();
+        try {
+            remotingClient.invokeOneway(channel, request, timeoutMillis);
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (RemotingTooMuchRequestException e) {
+            // 流控本身就是结论，不许被包装成"发送失败"
+            throw e;
+        } catch (Exception e) {
+            throw new RemotingSendRequestException(
+                    RemotingSendRequestException.newSendRequestException(describeChannel(channel), e));
+        }
+    }
+
+    /**
+     * 异步 RPC：响应到达后在 callbackExecutor 上执行 callback.
+     */
+    public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis,
+                            NettyRemotingAbstract.InvokeCallback callback)
+            throws RemotingConnectException, InterruptedException, Exception {
+        Channel channel = getOrCreateBrokerChannel(addr);
+        if (channel == null) {
+            throw new RemotingConnectException(addr);
+        }
+        try {
+            remotingClient.invokeAsync(channel, request, timeoutMillis, callback);
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (RemotingTooMuchRequestException e) {
+            // 流控本身就是结论，不许被包装成"发送失败"
+            throw e;
+        } catch (Exception e) {
+            throw new RemotingSendRequestException(
+                    RemotingSendRequestException.newSendRequestException(describeChannel(channel), e));
+        }
+    }
+
+    /** 防御: channel.remoteAddress() 可能为 null (mock / 极端断连) ⇒ 退回 channel.id(). */
+    private static String describeChannel(Channel channel) {
+        try {
+            return channel.remoteAddress() != null
+                    ? channel.remoteAddress().toString()
+                    : String.valueOf(channel.id());
+        } catch (Exception ex) {
+            return String.valueOf(channel.id());
+        }
     }
 
     private RemotingCommand invokeAndTranslateException(Channel channel, RemotingCommand request, long timeoutMillis)

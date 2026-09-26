@@ -19,8 +19,10 @@ public class ResponseFuture {
     private final long timeoutMillis;
     // 等待锁
     private final CountDownLatch countDownLatch = new CountDownLatch(1);
-    // 是否已释放
-    private final AtomicBoolean released = new AtomicBoolean(false);
+    // "回调已经跑过"标志：只表达回调投递，不参与许可 accounting
+    private final AtomicBoolean callbackExecuted = new AtomicBoolean(false);
+    // "异步许可已经归还"标志：只表达流控资源归还，可独立于回调发生
+    private final AtomicBoolean semaphoreReleased = new AtomicBoolean(false);
     // 回调函数
     private final NettyRemotingAbstract.InvokeCallback invokeCallback;
     // 信号量（用于流控）
@@ -51,9 +53,14 @@ public class ResponseFuture {
 
     /**
      * 执行回调
+     * <p>
+     * 用 {@code callbackExecuted} 这个 CAS 保证回调最多跑一次；结束时顺带归还许可。
+     * 注意许可归还是另一个独立标志位（见 {@link #release()}），两者不能互相顶替：
+     * 老实现里回调路径与 release 抢同一个 {@code released}，第二次 CAS 必然失败，
+     * 于是 semaphoreAsync 的许可每成功一次异步调用就泄漏一个。
      */
     public void executeInvokeCallback() {
-        if (invokeCallback != null && released.compareAndSet(false, true)) {
+        if (invokeCallback != null && callbackExecuted.compareAndSet(false, true)) {
             try {
                 invokeCallback.operationComplete(this);
             } catch (Throwable e) {
@@ -66,11 +73,27 @@ public class ResponseFuture {
 
     /**
      * 释放信号量
+     * <p>
+     * 幂等：无论被调用多少次（回调路径、requestFail、超时扫描），许可最多归还一次。
      */
     public void release() {
-        if (released.compareAndSet(false, true) && releaseSemaphore != null) {
+        if (semaphoreReleased.compareAndSet(false, true) && releaseSemaphore != null) {
             releaseSemaphore.release();
         }
+    }
+
+    /**
+     * 回调是否已执行（用于测试与诊断）。
+     */
+    public boolean isCallbackExecuted() {
+        return callbackExecuted.get();
+    }
+
+    /**
+     * 许可是否已归还（用于测试与诊断）。
+     */
+    public boolean isSemaphoreReleased() {
+        return semaphoreReleased.get();
     }
 
     /**

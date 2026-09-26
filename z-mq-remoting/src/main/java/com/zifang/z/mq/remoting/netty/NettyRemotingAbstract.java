@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -181,18 +182,39 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * 执行回调
+     * <p>
+     * 语义（对齐 RocketMQ）：回调默认投递到 callbackExecutor；只有当线程池不可用
+     * （未配置 / 已关闭 / 拒绝任务）时才退化到当前线程执行。
+     * 无论走哪条路、也无论回调自身是否抛出，都必须在结束时归还异步许可
+     * （{@link ResponseFuture#release()} 是幂等的）。
      */
     private void executeInvokeCallback(final ResponseFuture responseFuture) {
-        // 这里应该提交到回调线程池执行
-        // 简化实现，直接在当前线程执行
-        boolean runInThisThread = false;
-        // 实际实现应该提交到专门的回调线程池
-        if (runInThisThread) {
-            try {
-                responseFuture.executeInvokeCallback();
-            } catch (Throwable e) {
-                log.warn("executeInvokeCallback Exception", e);
+        final ExecutorService callbackExecutor = getCallbackExecutor();
+        boolean runInThisThread = callbackExecutor == null || callbackExecutor.isShutdown();
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    responseFuture.executeInvokeCallback();
+                } catch (Throwable e) {
+                    log.warn("executeInvokeCallback Exception", e);
+                } finally {
+                    // 许可归还与"回调是否跑过"是两件事，各自一个 CAS；这里保证每条路径恰好还一次
+                    responseFuture.release();
+                }
             }
+        };
+
+        if (runInThisThread) {
+            task.run();
+            return;
+        }
+        try {
+            callbackExecutor.execute(task);
+        } catch (RejectedExecutionException e) {
+            log.warn("callbackExecutor rejected callback task, fallback to this thread", e);
+            task.run();
         }
     }
 
@@ -245,6 +267,15 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * 异步调用实现
+     * <p>
+     * 许可 accounting：{@code semaphoreAsync} 的许可在这里借出，之后必须且只能由一条路径归还——
+     * <ol>
+     *   <li>成功：响应到达 → processResponseCommand → 回调 → {@link ResponseFuture#release()}</li>
+     *   <li>写失败：channel listener → requestFail → 回调 + release()</li>
+     *   <li>超时：scanResponseTable → 回调 + release()</li>
+     *   <li>投递阶段就抛：本方法就地 release()（不直接 release 信号量，避免与上面三条双还）</li>
+     * </ol>
+     * {@code ResponseFuture.release()} 自带幂等 CAS，所以"就地还 + 别处也调"不会多还。
      */
     protected void invokeAsyncImpl(final Channel channel, final RemotingCommand request,
                                    final long timeoutMillis, final InvokeCallback invokeCallback) throws Exception {
@@ -259,10 +290,14 @@ public abstract class NettyRemotingAbstract {
         final int opaque = request.getOpaque();
         final String addr = RemotingHelper.parseChannelRemoteAddr(channel);
 
+        final ResponseFuture responseFuture = new ResponseFuture(
+                channel, opaque, timeoutMillis, invokeCallback, this.semaphoreAsync);
         try {
-            final ResponseFuture responseFuture = new ResponseFuture(
-                    channel, opaque, timeoutMillis, invokeCallback, this.semaphoreAsync);
-            this.responseTable.put(opaque, responseFuture);
+            ResponseFuture stale = this.responseTable.put(opaque, responseFuture);
+            if (stale != null) {
+                // 同 opaque 撞上（理论上不会发生）：老 future 再没人处理，就地还它的许可
+                stale.release();
+            }
 
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
@@ -276,8 +311,11 @@ public abstract class NettyRemotingAbstract {
                     log.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });
+            // 从这一刻起，许可的归属交给 responseFuture（由回调/超时/写失败三条路之一归还）
         } catch (Exception e) {
-            this.semaphoreAsync.release();
+            // 投递没成功：这个 future 不会再被任何路径看到，就地归还（幂等，不会双还）
+            this.responseTable.remove(opaque, responseFuture);
+            responseFuture.release();
             throw new RemotingSendRequestException(
                     RemotingSendRequestException.newSendRequestException(addr, e));
         }

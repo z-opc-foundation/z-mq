@@ -153,14 +153,14 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
     }
 
     /**
-     * 从进程内 InMemoryQueueIndex 查询真实消息。
+     * 读取消息：索引只给位点，消息内容由 CommitLog 从 CommitLog 盘上读回来。
      * <p>
-     * nextOffset 由 InMemoryQueueIndex 保证单调递增, 内容来自 CommitLog.putMessage 实际写入的消息。
+     * nextOffset 由 InMemoryQueueIndex 保证单调递增, 内容来自 CommitLog 记录的字节（必经盘）。
      */
     private List<MessageExt> readMessages(CommitLog commitLog, String topic, int queueId, long offset, int maxNum) {
         if (commitLog.getQueueIndex() == null) {
             return java.util.Collections.emptyList();
         }
-        return commitLog.getQueueIndex().query(topic, queueId, offset, maxNum);
+        return commitLog.pullMessage(topic, queueId, offset, maxNum);
     }
 }
