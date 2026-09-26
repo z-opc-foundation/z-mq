@@ -119,7 +119,7 @@ public class TransactionMessageProcessor implements NettyRemotingAbstract.NettyR
             sendResult.setQueueId(queueId);
             AppendMessageResult amr = result.getAppendMessageResult();
             if (amr != null) {
-                sendResult.setQueueOffset(amr.getWroteOffset());
+                sendResult.setQueueOffset(inner.getQueueOffset());
             }
         } else {
             sendResult.setSendStatus(SendStatus.SEND_FAILED);

@@ -86,7 +86,8 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
                 sendResult.setMsgId(inner.getMsgId());
                 sendResult.setTopic(topic);
                 sendResult.setQueueId(queueId);
-                sendResult.setQueueOffset(amr.getWroteOffset());
+                // amr.getWroteOffset() 是 commitLog 的物理位点；队列位点由 CommitLog 分配后写回 inner
+                sendResult.setQueueOffset(inner.getQueueOffset());
             }
         } else if (result.getPutMessageStatus() == PutMessageStatus.FLUSH_DISK_TIMEOUT
                 && amr != null && amr.getStatus() == AppendMessageResult.AppendMessageStatus.PUT_OK) {
@@ -98,7 +99,7 @@ public class SendMessageProcessor implements NettyRemotingAbstract.NettyRequestP
             sendResult.setMsgId(inner.getMsgId());
             sendResult.setTopic(topic);
             sendResult.setQueueId(queueId);
-            sendResult.setQueueOffset(amr.getWroteOffset());
+            sendResult.setQueueOffset(inner.getQueueOffset());
             sendResult.setErrorMsg(PutMessageStatus.FLUSH_DISK_TIMEOUT.name());
             log.error("sync flush timeout, respond FLUSH_DISK_TIMEOUT to producer, topic={} queueId={} msgId={}",
                     topic, queueId, inner.getMsgId());
