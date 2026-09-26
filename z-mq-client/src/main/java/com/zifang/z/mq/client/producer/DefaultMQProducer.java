@@ -84,6 +84,27 @@ public class DefaultMQProducer {
      * 同步发送：阻塞等待结果，失败抛出异常.
      */
     public SendResult send(Message message) throws Exception {
+        return sendWithRequestCode(message, RequestCode.SEND_MESSAGE);
+    }
+
+    /**
+     * 按指定的请求码同步发送. 普通发送走 {@link RequestCode#SEND_MESSAGE},
+     * 事务的 prepare 阶段走 {@link RequestCode#SEND_MESSAGE_V2} —— 两者共用同一套
+     * "路由 → 选队列 → 找 master 地址 → 编码" 的组包口径, 只差那一个码, 所以只有码是参数.
+     * <p>
+     * 路由与队列始终按 {@code message.getTopic()} 这条【业务 topic】来选: 调用方不许为了
+     * "让它落到别的 topic" 而就地改掉消息自己的 topic, 那是把业务 topic 丢掉的第一步
+     * (broker 侧回投时就没有原始 topic 可用了).
+     */
+    protected SendResult sendWithRequestCode(Message message, int requestCode) throws Exception {
+        return executePreparedSend(prepareMessageSend(message, requestCode));
+    }
+
+    /**
+     * 只做组包 (含前置校验), 不发; 调用方拿到 {@link PreparedSend} 后就知道这条消息真正落到了
+     * 哪台 broker —— 事务的二次确认必须发往【写下半消息的那一台】, 而不是另查一次路由.
+     */
+    PreparedSend prepareMessageSend(Message message, int requestCode) throws Exception {
         if (message == null) {
             throw new IllegalArgumentException("message is null");
         }
@@ -91,9 +112,12 @@ public class DefaultMQProducer {
             throw new IllegalStateException("producer not started");
         }
         validateMessage(message);
-        MQClientInstance instance = getOrCreateInstance();
+        return prepareSend(getOrCreateInstance(), message, requestCode);
+    }
 
-        PreparedSend prepared = prepareSend(instance, message);
+    /** 把一条已组好的请求同步发出去并翻译成 SendResult. */
+    SendResult executePreparedSend(PreparedSend prepared) throws Exception {
+        MQClientInstance instance = getOrCreateInstance();
 
         // 同步 RPC
         RemotingCommand response = instance.invokeSync(prepared.brokerAddr, prepared.request, sendMsgTimeoutMillis);
@@ -103,6 +127,11 @@ public class DefaultMQProducer {
             result.setMsgId(prepared.request.getExtField("msgId"));
         }
         return result;
+    }
+
+    /** 这条请求实际发往的 broker 地址 (二次确认要发回同一台). */
+    String brokerAddrOf(PreparedSend prepared) {
+        return prepared.brokerAddr;
     }
 
     /**
@@ -218,9 +247,13 @@ public class DefaultMQProducer {
     }
 
     /**
-     * 组一条 SEND_MESSAGE 请求：路由 → 选队列 → 找 master 地址 → 编码消息体.
+     * 组一条发送请求：路由 → 选队列 → 找 master 地址 → 编码消息体.
      */
     private PreparedSend prepareSend(MQClientInstance instance, Message message) throws Exception {
+        return prepareSend(instance, message, RequestCode.SEND_MESSAGE);
+    }
+
+    private PreparedSend prepareSend(MQClientInstance instance, Message message, int requestCode) throws Exception {
         TopicRouteData routeData = instance.getTopicRouteData(message.getTopic());
         if (routeData == null || routeData.getQueueDatas() == null || routeData.getQueueDatas().isEmpty()) {
             throw new RemotingSendRequestException("No route for topic: " + message.getTopic());
@@ -233,12 +266,16 @@ public class DefaultMQProducer {
         if (brokerAddr == null) {
             throw new RemotingSendRequestException("No master addr for broker: " + mq.getBrokerName());
         }
-        return new PreparedSend(mq, brokerAddr, buildSendRequest(message, mq));
+        return new PreparedSend(mq, brokerAddr, buildSendRequest(message, mq, requestCode));
     }
 
-    private RemotingCommand buildSendRequest(Message message, MessageQueue mq) {
+    RemotingCommand buildSendRequest(Message message, MessageQueue mq) {
+        return buildSendRequest(message, mq, RequestCode.SEND_MESSAGE);
+    }
+
+    RemotingCommand buildSendRequest(Message message, MessageQueue mq, int requestCode) {
         MessageExt inner = buildMessageExt(message, mq);
-        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.SEND_MESSAGE);
+        RemotingCommand request = RemotingCommand.createRequestCommand(requestCode);
         request.addExtField("msgId", inner.getMsgId());
         request.addExtField("topic", message.getTopic());
         request.addExtField("queueId", String.valueOf(mq.getQueueId()));
@@ -310,10 +347,10 @@ public class DefaultMQProducer {
     }
 
     /** 一次发送的预备结果：选中的队列、目标地址与已编码的请求. */
-    private static class PreparedSend {
-        private final MessageQueue messageQueue;
-        private final String brokerAddr;
-        private final RemotingCommand request;
+    static class PreparedSend {
+        final MessageQueue messageQueue;
+        final String brokerAddr;
+        final RemotingCommand request;
 
         PreparedSend(MessageQueue messageQueue, String brokerAddr, RemotingCommand request) {
             this.messageQueue = messageQueue;

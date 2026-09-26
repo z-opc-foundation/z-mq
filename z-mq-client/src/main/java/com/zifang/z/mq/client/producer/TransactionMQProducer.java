@@ -3,14 +3,17 @@ package com.zifang.z.mq.client.producer;
 import com.zifang.z.mq.client.MQClientInstance;
 import com.zifang.z.mq.common.message.Message;
 import com.zifang.z.mq.common.protocol.SendResult;
+import com.zifang.z.mq.common.util.JsonCodec;
 import com.zifang.z.mq.remoting.exception.RemotingSendRequestException;
 import com.zifang.z.mq.remoting.exception.RemotingTimeoutException;
 import com.zifang.z.mq.remoting.netty.NettyClientConfig;
+import com.zifang.z.mq.remoting.netty.RemotingSysResponseCode;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,6 +52,9 @@ public class TransactionMQProducer extends DefaultMQProducer {
     /** Half 消息缓存: transactionId -> Message */
     private final ConcurrentHashMap<String, Message> halfMessageTable = new ConcurrentHashMap<>();
 
+    /** 半消息落在哪台 broker 上: transactionId -> brokerAddr（二次确认必须发回同一台） */
+    private final ConcurrentHashMap<String, String> halfBrokerAddrTable = new ConcurrentHashMap<>();
+
     public TransactionMQProducer(String producerGroup) {
         super(producerGroup);
     }
@@ -59,11 +65,15 @@ public class TransactionMQProducer extends DefaultMQProducer {
 
     /**
      * 发送事务消息（两阶段）。
+     * <p>
+     * prepare 阶段走 {@link RequestCode#SEND_MESSAGE_V2}（broker 侧由事务处理器落成半消息），
+     * 业务 topic 全程不改：半消息落到哪个队列由 broker 从请求里读到并记住，提交时原样回投。
      *
      * @param message 待发送的消息
      * @param arg     传递给 TransactionListener.executeLocalTransaction 的参数
      * @return 发送结果
-     * @throws Exception 发送异常
+     * @throws Exception 发送异常；二次确认没送到时也抛（半消息已经在 broker 上，调用方可以用
+     *                   {@link #endTransaction} 补确认）
      */
     public SendResult sendMessageInTransaction(Message message, Object arg) throws Exception {
         if (transactionListener == null) {
@@ -75,52 +85,72 @@ public class TransactionMQProducer extends DefaultMQProducer {
         message.putProperty("TRANSACTION_ID", transactionId);
         message.setTransactionId(transactionId);
 
-        // 1. 发送 Half 消息到 Broker
-        // 将消息 Topic 临时改为 TRANS_HALF_TOPIC
+        // 1. 发送 Half 消息到 Broker（业务 topic 保持原样，只换请求码）
         String originalTopic = message.getTopic();
-        message.setTopic("TRANS_HALF_TOPIC");
+        PreparedSend half = prepareMessageSend(message, RequestCode.SEND_MESSAGE_V2);
+        String halfBrokerAddr = brokerAddrOf(half);
 
-        try {
-            SendResult sendResult = super.send(message);
-            if (sendResult == null || sendResult.getSendStatus() != com.zifang.z.mq.common.protocol.SendStatus.SEND_OK) {
-                log.error("Send half message failed: transactionId={}", transactionId);
-                return sendResult;
-            }
-
-            // 2. 缓存 Half 消息
-            halfMessageTable.put(transactionId, message);
-
-            // 3. 执行本地事务
-            TransactionState localState;
-            try {
-                localState = transactionListener.executeLocalTransaction(message, arg);
-            } catch (Exception e) {
-                log.error("Execute local transaction failed: transactionId={}", transactionId, e);
-                localState = TransactionState.UNKNOWN;
-            }
-
-            // 4. 缓存本地事务状态
-            localTransactionStateTable.put(transactionId, localState);
-
-            // 5. 发送二次确认到 Broker
-            sendTransactionCommit(transactionId, originalTopic, localState);
-
+        SendResult sendResult = executePreparedSend(half);
+        if (sendResult == null || sendResult.getSendStatus() != com.zifang.z.mq.common.protocol.SendStatus.SEND_OK) {
+            log.error("Send half message failed: transactionId={}", transactionId);
             return sendResult;
-        } catch (Exception e) {
-            // 发送 Half 消息失败，回滚
-            message.setTopic(originalTopic);
-            throw e;
         }
+
+        // 2. 缓存 Half 消息
+        halfMessageTable.put(transactionId, message);
+        halfBrokerAddrTable.put(transactionId, halfBrokerAddr);
+
+        // 3. 执行本地事务
+        TransactionState localState;
+        try {
+            localState = transactionListener.executeLocalTransaction(message, arg);
+        } catch (Exception e) {
+            log.error("Execute local transaction failed: transactionId={}", transactionId, e);
+            localState = TransactionState.UNKNOWN;
+        }
+        if (localState == null) {
+            // listener 返回 null 不是"提交"，按未决处理，留给回查
+            localState = TransactionState.UNKNOWN;
+        }
+
+        // 4. 缓存本地事务状态
+        localTransactionStateTable.put(transactionId, localState);
+
+        // 5. 发送二次确认到 Broker
+        sendTransactionCommit(transactionId, originalTopic, localState, halfBrokerAddr);
+
+        return sendResult;
+    }
+
+    /**
+     * 事后补二次确认：{@link #sendMessageInTransaction} 在"半消息已落住、确认没送到"时把决定权交回
+     * 调用方，调用方随时可以用同一个 transactionId 重发确认（broker 侧确认是幂等的）。
+     */
+    public void endTransaction(String transactionId, String originalTopic, TransactionState state)
+            throws Exception {
+        String brokerAddr = halfBrokerAddrTable.get(transactionId);
+        if (brokerAddr == null) {
+            brokerAddr = selectBrokerAddr();
+        }
+        sendTransactionCommit(transactionId, originalTopic, state, brokerAddr);
     }
 
     /**
      * 发送事务二次确认（Commit/Rollback）到 Broker。
+     * <p>
+     * 失败一律抛出去：这一条确认没落地就意味着"半消息会一直挂在待回查集合里，最终被自动回滚"，
+     * 调用方必须知道这件事，不能只留一行 warn。
      */
-    private void sendTransactionCommit(String transactionId, String originalTopic, TransactionState state)
-            throws Exception {
-        if (mqClientInstance == null) {
-            log.warn("MQClientInstance not initialized, skip transaction commit: transactionId={}", transactionId);
-            return;
+    private void sendTransactionCommit(String transactionId, String originalTopic, TransactionState state,
+                                       String brokerAddr) throws Exception {
+        MQClientInstance instance = mqClientInstance;
+        if (instance == null) {
+            throw new IllegalStateException("MQClientInstance not initialized, transaction commit not sent:"
+                    + " transactionId=" + transactionId);
+        }
+        if (brokerAddr == null) {
+            throw new RemotingSendRequestException("No broker addr for transaction commit: transactionId="
+                    + transactionId);
         }
 
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.END_TRANSACTION);
@@ -128,21 +158,92 @@ public class TransactionMQProducer extends DefaultMQProducer {
         request.addExtField("originalTopic", originalTopic);
         request.addExtField("transactionState", state.name());
 
-        // 选择 Broker 地址发送
-        String brokerAddr = selectBrokerAddr();
+        RemotingCommand response;
+        try {
+            response = instance.invokeSync(brokerAddr, request, 3000);
+        } catch (RemotingTimeoutException | RemotingSendRequestException e) {
+            throw new RemotingSendRequestException("Send transaction commit failed: transactionId="
+                    + transactionId + " brokerAddr=" + brokerAddr + " cause=" + e.getMessage());
+        }
+        if (response == null) {
+            throw new RemotingSendRequestException("No response for transaction commit: transactionId="
+                    + transactionId + " brokerAddr=" + brokerAddr);
+        }
+        if (response.getCode() != RemotingSysResponseCode.SUCCESS) {
+            throw new RemotingSendRequestException("Broker rejected transaction commit: transactionId="
+                    + transactionId + " code=" + response.getCode() + " remark=" + response.getRemark());
+        }
+        log.info("Transaction commit sent: transactionId={} state={} brokerAddr={}", transactionId, state, brokerAddr);
+    }
+
+    /**
+     * 主动拉一次待回查事务并按本地事务状态作答（回查在生产者这一侧驱动）。
+     * <p>
+     * broker 结构上没有到 producer 的通道（client 侧不监听任何端口），所以"回查"能兑现的形状是
+     * 生产者主动来取：请求 {@link RequestCode#CHECK_TRANSACTION_STATE} 不带 transactionId 时，
+     * broker 回一批待回查快照；本方法对每一条问 {@link TransactionListener#checkLocalTransaction}，
+     * 拿到确定状态就把二次确认发回去。
+     *
+     * @return 本轮实际作答（发出二次确认）的事务条数
+     */
+    public int checkPendingTransactions() throws Exception {
+        return checkPendingTransactions(null);
+    }
+
+    /**
+     * @param brokerAddrHint 明确指定问哪台 broker；不传时用"本进程写过半消息的那台"，
+     *                       再退回按 {@code TRANS_HALF_TOPIC} 的路由查（这条 topic 没有在 nameserver
+     *                       建过配置时查不到，所以 hint 这一档是必须的，不是可选的便利参数）。
+     */
+    public int checkPendingTransactions(String brokerAddrHint) throws Exception {
+        MQClientInstance instance = mqClientInstance;
+        if (instance == null) {
+            throw new IllegalStateException("producer not started");
+        }
+        String brokerAddr = brokerAddrHint;
+        if (brokerAddr == null && !halfBrokerAddrTable.isEmpty()) {
+            brokerAddr = halfBrokerAddrTable.values().iterator().next();
+        }
         if (brokerAddr == null) {
-            log.warn("No broker available for transaction commit: transactionId={}", transactionId);
-            return;
+            brokerAddr = selectBrokerAddr();
+        }
+        if (brokerAddr == null) {
+            throw new RemotingSendRequestException("No broker addr for transaction check");
         }
 
-        try {
-            RemotingCommand response = mqClientInstance.invokeSync(brokerAddr, request, 3000);
-            if (response != null) {
-                log.info("Transaction commit sent: transactionId={} state={}", transactionId, state);
-            }
-        } catch (RemotingTimeoutException | RemotingSendRequestException e) {
-            log.error("Send transaction commit failed: transactionId={}", transactionId, e);
+        RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.CHECK_TRANSACTION_STATE);
+        RemotingCommand response = instance.invokeSync(brokerAddr, request, 3000);
+        if (response == null) {
+            throw new RemotingSendRequestException("No response for transaction check, brokerAddr=" + brokerAddr);
         }
+        if (response.getCode() != RemotingSysResponseCode.SUCCESS) {
+            throw new RemotingSendRequestException("Broker rejected transaction check: code="
+                    + response.getCode() + " remark=" + response.getRemark());
+        }
+        byte[] body = response.getBody();
+        if (body == null || body.length == 0) {
+            return 0;
+        }
+        List<TransactionCheckTask> tasks = JsonCodec.decodeList(body, TransactionCheckTask.class);
+        if (tasks == null || tasks.isEmpty()) {
+            return 0;
+        }
+        int answered = 0;
+        for (TransactionCheckTask task : tasks) {
+            if (task == null || task.getTransactionId() == null) {
+                continue;
+            }
+            String txId = task.getTransactionId();
+            TransactionState state = checkTransaction(txId);
+            if (state == TransactionState.UNKNOWN) {
+                // 本地事务还没结论：不作答，留给下一轮回查（broker 侧到次数会自动回滚）
+                log.info("Transaction check still UNKNOWN, leave it pending: transactionId={}", txId);
+                continue;
+            }
+            endTransaction(txId, task.getOriginalTopic(), state);
+            answered++;
+        }
+        return answered;
     }
 
     /**
@@ -167,10 +268,11 @@ public class TransactionMQProducer extends DefaultMQProducer {
 
         try {
             TransactionState state = transactionListener.checkLocalTransaction(halfMessage);
-            if (state != TransactionState.UNKNOWN) {
+            if (state != null && state != TransactionState.UNKNOWN) {
                 localTransactionStateTable.put(transactionId, state);
+                return state;
             }
-            return state;
+            return TransactionState.UNKNOWN;
         } catch (Exception e) {
             log.error("Check local transaction failed: transactionId={}", transactionId, e);
             return TransactionState.UNKNOWN;
@@ -183,6 +285,7 @@ public class TransactionMQProducer extends DefaultMQProducer {
     public void clearTransactionCache(String transactionId) {
         localTransactionStateTable.remove(transactionId);
         halfMessageTable.remove(transactionId);
+        halfBrokerAddrTable.remove(transactionId);
     }
 
     private String selectBrokerAddr() {

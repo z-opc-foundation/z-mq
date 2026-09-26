@@ -86,6 +86,12 @@ public class BrokerController {
     private SendMessageProcessor sendMessageProcessor;
     private PullMessageProcessor pullMessageProcessor;
     private ConsumerOffsetProcessor consumerOffsetProcessor;
+    /**
+     * 事务消息处理器（半消息 / 二次确认 / 回查三个码都挂在它身上，见 registerProcessor）。
+     */
+    private com.zifang.z.mq.broker.processor.TransactionMessageProcessor transactionMessageProcessor;
+    /** 事务回查调度（broker 进程内驱动"超时未确认 ⇒ 自动回滚"）。 */
+    private com.zifang.z.mq.broker.transaction.TransactionCheckService transactionCheckService;
 
     /**
      * v2 增强组件:
@@ -265,6 +271,51 @@ public class BrokerController {
         com.zifang.z.mq.broker.ha.HAProcessor haProcessor = new com.zifang.z.mq.broker.ha.HAProcessor(this);
         this.remotingServer.registerProcessor(
                 RequestCode.HA_REPORT_OFFSET, haProcessor, this.adminBrokerExecutor);
+
+        // 事务消息：半消息 (SEND_MESSAGE_V2=201) / 二次确认 (END_TRANSACTION=251) / 回查 (CHECK_TRANSACTION_STATE=250)
+        //
+        // 为什么半消息绑 201 而不是复用 200：200 已经绑给 SendMessageProcessor，那条路径把消息按业务
+        // topic 直接写进存储、对消费者立刻可见。让"提交前不该可见"的半消息也走 200，就等于要求两个
+        // 处理器在同一条码上分诊 —— 分错一次的后果是同一条消息既以半消息又以业务 topic 落进存储两次。
+        // 201 在 src/main 里今天零发送方（DefaultMQProducer.send 一律发 200），所以绑上它不会改道任何
+        // 既有发送；这个"不改道"由 TransactionHalfMessageIsolationTest 钉住。
+        this.transactionMessageProcessor = new com.zifang.z.mq.broker.processor.TransactionMessageProcessor(this);
+        this.remotingServer.registerProcessor(
+                RequestCode.SEND_MESSAGE_V2, this.transactionMessageProcessor, this.sendMessageExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.END_TRANSACTION, this.transactionMessageProcessor, this.sendMessageExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.CHECK_TRANSACTION_STATE, this.transactionMessageProcessor, this.adminBrokerExecutor);
+
+        // 事务表跨重启：CommitLog.load() 已经在本方法之前跑完（initialize() 里），盘上的半消息与
+        // 定论记录此刻读得回来，所以恢复点落在这里而不是 start()。
+        int recovered = com.zifang.z.mq.broker.transaction.TransactionStateRecovery.recover(
+                this.commitLog, this.transactionMessageProcessor.getTransactionStateManager());
+        if (recovered > 0) {
+            log.info("Transaction pending set rebuilt from commitlog: {} half message(s)", recovered);
+        }
+
+        // 回查调度：broker 侧唯一能自己走的那一半是"悬着不答的事务到次数自动回滚"。
+        // 回查拿不到结论时（broker 进程内没有本地事务这个概念）一律按 UNKNOWN 计一次数，
+        // 真正的结论由 producer 侧通过 END_TRANSACTION 送进来，或由 producer 主动来取（见 client）。
+        this.transactionCheckService = new com.zifang.z.mq.broker.transaction.TransactionCheckService(
+                this.transactionMessageProcessor.getTransactionStateManager(),
+                new com.zifang.z.mq.broker.transaction.TransactionCheckService.TransactionCheckCallback() {
+                    @Override
+                    public com.zifang.z.mq.client.producer.TransactionState checkTransaction(
+                            String transactionId, com.zifang.z.mq.common.message.Message halfMessage) {
+                        return com.zifang.z.mq.client.producer.TransactionState.UNKNOWN;
+                    }
+                });
+        // 回查得出的结论要兑现成"回投 + 定论记录"，用处理器那一份实现，不在这里另抄一遍
+        this.transactionCheckService.setTransactionOutcomeApplier(
+                new com.zifang.z.mq.broker.transaction.TransactionCheckService.TransactionOutcomeApplier() {
+                    @Override
+                    public void apply(String transactionId,
+                                      com.zifang.z.mq.client.producer.TransactionState state) {
+                        transactionMessageProcessor.resolveTransaction(transactionId, state);
+                    }
+                });
     }
 
     /**
@@ -282,6 +333,14 @@ public class BrokerController {
             // 启动 v2 增强组件
             this.pullRequestHoldService.start();
             this.scheduleMessageService.start();
+
+            // 事务回查调度：扫"悬着没答"的集合，到 maxCheckTimes 判回滚。
+            // 扫描节拍是运维参数，不是任何一条用例的判据 —— 用例一律直接驱动 checkOnce()，
+            // 不在测试里等这个间隔。
+            if (this.transactionCheckService != null) {
+                this.transactionCheckService.start(
+                        this.transactionMessageProcessor.getTransactionStateManager().getCheckIntervalMillis());
+            }
 
             // v3 HA: 启动 HAService (Master 模式启动 push 线程, Slave 模式启动 sync 线程)
             this.haService.start();
@@ -434,6 +493,9 @@ public class BrokerController {
                 this.scheduleMessageService.shutdown();
             }
 
+            if (this.transactionCheckService != null) {
+                this.transactionCheckService.shutdown();
+            }
             if (this.consumerOffsetManager != null) {
                 this.consumerOffsetManager.shutdown();
             }
@@ -502,8 +564,25 @@ public class BrokerController {
     /**
      * @return Pull 长轮询服务
      */
+    /**
+     * @return Pull 长轮询服务
+     */
     public PullRequestHoldService getPullRequestHoldService() {
         return pullRequestHoldService;
+    }
+
+    /**
+     * @return 事务消息处理器（半消息 / 二次确认 / 回查三个码的处理器，事务状态表挂在它身上）
+     */
+    public com.zifang.z.mq.broker.processor.TransactionMessageProcessor getTransactionMessageProcessor() {
+        return transactionMessageProcessor;
+    }
+
+    /**
+     * @return 事务回查调度服务（测试用它的 checkOnce() 因果驱动一轮扫描）
+     */
+    public com.zifang.z.mq.broker.transaction.TransactionCheckService getTransactionCheckService() {
+        return transactionCheckService;
     }
 
     /**

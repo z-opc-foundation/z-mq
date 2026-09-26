@@ -23,8 +23,20 @@ public class TransactionCheckService {
 
     private static final Logger log = LogManager.getLogger(TransactionCheckService.class);
 
+    /**
+     * 把"回查得到的结论"兑现出去。
+     * <p>
+     * 为什么要有这一层：提交不是一次状态改写，它是"改写 + 把消息按原始 topic 回投 + 落一条定论记录"。
+     * 这三步在 {@code TransactionMessageProcessor} 里已经有一份了，回查驱动再抄一份就是两个真相，
+     * 早晚漂移。所以由 broker 装配时把处理器那一侧递进来，定时回查与客户端二次确认共用同一个兑现点。
+     */
+    public interface TransactionOutcomeApplier {
+        void apply(String transactionId, com.zifang.z.mq.client.producer.TransactionState state);
+    }
+
     private final TransactionStateManager transactionStateManager;
     private final TransactionCheckCallback checkCallback;
+    private volatile TransactionOutcomeApplier outcomeApplier;
     private ScheduledExecutorService checkExecutor;
     private volatile boolean running = false;
 
@@ -63,7 +75,12 @@ public class TransactionCheckService {
             return t;
         });
         this.running = true;
-        this.checkExecutor.scheduleAtFixedRate(this::doCheck, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
+        this.checkExecutor.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                checkOnce();
+            }
+        }, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
         log.info("TransactionCheckService started: interval={}ms", intervalMillis);
     }
 
@@ -79,9 +96,12 @@ public class TransactionCheckService {
     }
 
     /**
-     * 执行回查扫描。
+     * 扫一轮待回查事务。定时任务走的也是这一个方法。
+     * <p>
+     * 单列出来是为了让"这一轮到底改了什么状态"可以在没有定时等待的情况下被驱动与断言：
+     * 判据落在状态变化上，而不是落在"睡一会儿之后大概扫过了"上。
      */
-    private void doCheck() {
+    public void checkOnce() {
         if (!running || checkCallback == null) {
             return;
         }
@@ -93,7 +113,8 @@ public class TransactionCheckService {
             for (TransactionStateManager.TransactionRecord record : pendingList) {
                 if (record.getCheckTimes() >= transactionStateManager.getMaxCheckTimes()) {
                     // 超过最大回查次数，自动回滚
-                    transactionStateManager.rollbackTransaction(record.getTransactionId());
+                    applyOutcome(record.getTransactionId(),
+                            com.zifang.z.mq.client.producer.TransactionState.ROLLBACK);
                     log.warn("Transaction max check times reached, auto rolled back: transactionId={}",
                             record.getTransactionId());
                     continue;
@@ -106,14 +127,17 @@ public class TransactionCheckService {
 
                     switch (state) {
                         case COMMIT:
-                            transactionStateManager.commitTransaction(record.getTransactionId());
+                            applyOutcome(record.getTransactionId(),
+                                    com.zifang.z.mq.client.producer.TransactionState.COMMIT);
                             log.info("Transaction check result: COMMIT, transactionId={}", record.getTransactionId());
                             break;
                         case ROLLBACK:
-                            transactionStateManager.rollbackTransaction(record.getTransactionId());
+                            applyOutcome(record.getTransactionId(),
+                                    com.zifang.z.mq.client.producer.TransactionState.ROLLBACK);
                             log.info("Transaction check result: ROLLBACK, transactionId={}", record.getTransactionId());
                             break;
                         case UNKNOWN:
+                        default:
                             // 继续等待下次回查
                             transactionStateManager.markChecked(record.getTransactionId());
                             log.debug("Transaction check result: UNKNOWN, transactionId={} checkTimes={}",
@@ -134,6 +158,26 @@ public class TransactionCheckService {
         } catch (Exception e) {
             log.error("Transaction check scan failed", e);
         }
+    }
+
+    /** 一次结论的全部副作用都走这一个出口（幂等：重复结论不会投第二份，见状态表的 resolved 表）。 */
+    private void applyOutcome(String transactionId, com.zifang.z.mq.client.producer.TransactionState state) {
+        TransactionOutcomeApplier applier = this.outcomeApplier;
+        if (applier != null) {
+            applier.apply(transactionId, state);
+            return;
+        }
+        // 没有装配兑现点时退回"只改状态"这一半 —— 那也是本服务接线之前的全部行为。
+        if (state == com.zifang.z.mq.client.producer.TransactionState.COMMIT) {
+            transactionStateManager.commitTransaction(transactionId);
+        } else {
+            transactionStateManager.rollbackTransaction(transactionId);
+        }
+    }
+
+    /** 由 broker 装配：回查结论要由谁来兑现（正常装配是事务处理器）。 */
+    public void setTransactionOutcomeApplier(TransactionOutcomeApplier outcomeApplier) {
+        this.outcomeApplier = outcomeApplier;
     }
 
     /**
