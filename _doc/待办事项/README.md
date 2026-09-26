@@ -15,6 +15,7 @@
 | `feature008_batch_commit_coupling/` | 用户拍 2 问（提交点粒度、要不要写进文档） | 失败批次的位点提交是**整批**判的（`DefaultMQPushConsumer` 的 `handleConsumeFailure`，`main = 903f8a2` 上实测 `:366-384`；判据 `grep -n 'handleConsumeFailure\|allPersisted'` 现读，别抄行号）⇒ 一条没后继拖着全批重拉、已落盘的那几条各再多一份副本；这个形状零用例覆盖 | 待裁定 |
 | `feature009_test_port_collision/` | 不等裁定，等 W4 归属 | 5 个起真监听的测试类把端口写死（10+1 个五位字面量）⇒ 同机并跑必 bind 失败，实测吞掉 `HAServiceTest` 整类 7 格只留 1 条错误读数；**另实测一次 `freePort()` 自己也会红**（探到就 close ⇒ TOCTOU，本机 load 28 那轮 `TopicConfigRestartE2ETest` 中招）⇒ 换写法只是降概率 | 待排产 |
 | `feature010_push_offset_silent_commit_failure/` | 不等拍板，等排产归属（W2i 或 W4） | **未改动的 `d703508` 上跑全套，每轮都有 1–2 条真实的位点提交失败被吞**（7 遍本机 clean 实测：`IT_PUSH_CONSUMER` 7/7、`tx-message-group` 6/7，全是 `err=null` ⇒ 异常类型丢了）；W2h 装了出口（`getOffsetCommitFailures()` + 结构守卫）但**这 2 条落在哪一路、为什么失败没人断**——计数器只在各自消费者实例上，跨测试类不汇总 | 待排产 |
+| `feature011_jvm_pause_drops_broker_response/` | 不等拍板，等排产归属 | 本机 12 轮 clean 里 **1 轮 1 条**具名红：通道已建好（server 绑定成功 + `channelActive`）而一条请求 10s 无响应 ⇒ `RemotingTimeoutException`。**不是 feature009 的撞号**：超时点前整个 JVM **7.715s 零日志输出**（05:35:13.082 → 05:35:20.797），像停顿不像丢包；同形状那条出自 W2e-R 的树（387 份日志里共 2 份）⇒ 与 W2h 无关，已三条尺分开。证"停顿"要开 fork 的 GC/安全点日志（**动 `<argLine>` ⇒ 排产决定**） | 待排产 |
 
 **登记口径**（2026-09-26 23:06–23:12 实测后更正）：先前这里写过"另有一批登记未修的缺陷不在这里，逐条在战役卡 §6"——
 那句话把两类东西混在了一起。实际是：**需要拍板的**在上面的表里；**不需要拍板、只需要排产归属的**从 feature005 起也进本册。
