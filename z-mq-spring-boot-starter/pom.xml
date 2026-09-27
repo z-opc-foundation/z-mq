@@ -7,10 +7,9 @@
     <parent>
         <groupId>io.github.yuku123</groupId>
         <artifactId>z-mq</artifactId>
-        <version>1.2.1</version>
+        <version>${revision}</version>
     </parent>
     <groupId>io.github.yuku123</groupId>
-    <version>1.2.1</version>
 
     <artifactId>z-mq-spring-boot-starter</artifactId>
     <packaging>jar</packaging>
@@ -50,7 +49,7 @@
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-client</artifactId>
-            <version>1.2.1</version>
+            <version>${project.version}</version>
         </dependency>
 
         <!-- Spring Boot -->

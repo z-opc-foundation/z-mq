@@ -15,7 +15,7 @@
          显式覆盖 parent 的 com.zifang，保留 parent 仅用于继承 monorepo 本地构建链 -->
     <groupId>io.github.yuku123</groupId>
     <artifactId>z-mq</artifactId>
-    <version>1.2.1</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>z-mq</name>
@@ -61,6 +61,8 @@
 
     <properties>
         <!-- Java Version -->
+        <!-- 版本单一真源：抬号只改这一行（配下方常开 flatten，入库/发布件里落成字面量） -->
+        <revision>1.3.0</revision>
         <java.version>8</java.version>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
