@@ -7,7 +7,7 @@
 |---|---|---|---|
 | `feature001_acl/` | 用户拍 3 问 | README:127「ACL 访问控制（`aclEnable=true`）」 | 待裁定 |
 | `feature002_sync_master/` | 用户拍 2 问 | README:117/278「Master-Slave 同步双写（`SYNC_MASTER`）」 | 待裁定 |
-| `feature003_release_1_3_0/` | 用户点头 2 件 | 发 Central `1.3.0`、抬 z-boot 的 `z-mq.version` pin | 待点头 |
+| `feature003_release_1_3_0/` | 用户拍 A/B/C 一句（"从哪棵树发"） | 抬号那笔**已落** `main=8571949`（9 pom、23+/29−）并过完本册 §4 三道尺＋flatten 形状尺；`repo1` 的 `1.3.0` 仍 **404**＝一件都没对外。z-boot pin 已被 `4495795` 抬到 1.2.1 ⇒ 剩 1.2.1→1.3.0，前置是"已发布"。发出去会自带一条空广告：`main` 的 producer 包 `retry` 命中 **0**（w2g 树同尺 **132**，阳性对照）而 `README:119` 写着「✅ Producer 自动重试」 | 待拍（我倾向 A：等 W2g 的 250 腿） |
 | `feature004_transaction_check/` | W2f 证据先回来 | README:112「事务消息（两阶段提交 + 回查）」⇒ 回查需二次裁定 | 等证据 |
 | `feature005_metadata_lifecycle/` | 不等裁定，等排产归属 | `DataVersion` 两条恒 0 且不落盘、`DELETE_TOPIC` 有码无处理器、17 个零引用协议码 | 待排产 |
 | `feature006_dlq_topic_registration/` | 用户拍板（范围扩张） | 死信 Topic `%DLQ%{group}` 要显式注册才投得出去：client 零建 topic 口（0 命中 vs 5 文件阳性对照）、broker 无 autocreate ⇒ 三选一（broker 特例自动登记 / client 启动登记 / 诚实化改文档） | 待裁定 |
