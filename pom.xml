@@ -4,15 +4,22 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- 消费入口统一走 z-boot-parent（1.0.19 起全组织口径，试点是 z-cache）：它继承第三方地板
+         z-boot-dependencies:1.0.19（156 条受管项）、import 兄弟仓权威 z-boot-fleet:1.0.0
+         （163 条 io.github.yuku123:z-*），并下发 Java 8 的 pluginManagement。
+         以前这里是 com.zifang:z-opc:1.0.0-SNAPSHOT：那份 pom 只存在于作者本机 ~/.m2、对外从不发布，
+         而 <relativePath>../pom.xml</relativePath> 指的 ../pom.xml 实测不存在
+         （z-opc-foundation/ 下没有根 pom）⇒ 换台机器连 pom 都读不动。
+         relativePath 必须留空：parent 不在磁盘上，在 repo1。 -->
     <parent>
-        <groupId>com.zifang</groupId>
-        <artifactId>z-opc</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
+        <groupId>io.github.yuku123</groupId>
+        <artifactId>z-boot-parent</artifactId>
+        <version>1.0.19</version>
+        <relativePath/>
     </parent>
 
-    <!-- Maven Central 用 io.github.yuku123（已通过 Sonatype namespace 验证）
-         显式覆盖 parent 的 com.zifang，保留 parent 仅用于继承 monorepo 本地构建链 -->
+    <!-- Maven Central 用 io.github.yuku123（已通过 Sonatype namespace 验证）。
+         迁移后这不再是对 parent 的"覆盖"——parent 本身就在同一个 groupId 下。 -->
     <groupId>io.github.yuku123</groupId>
     <artifactId>z-mq</artifactId>
     <version>${revision}</version>
@@ -63,32 +70,43 @@
         <!-- Java Version -->
         <!-- 版本单一真源：抬号只改这一行（配下方常开 flatten，入库/发布件里落成字面量） -->
         <revision>1.3.0</revision>
+        <!-- java.version 与父链（z-boot-dependencies）的 1.8 只是**字符串**不同、语义同（javac 里
+             8 与 1.8 是同义写法），但本仓有 3 处配置直接引用它：compiler 的 <source>/<target> 与
+             central profile 里 javadoc 的 <source>（grep 现读，全仓 pom 之外 0 处读者，也没有任何
+             代码/脚本拿它做字符串比较）。删掉这一格会让 effective 构建口径的字面值从 "8" 变成 "1.8"，
+             那是迁移顺带改构建参数，不属于"依赖零漂移"这一档 ⇒ 留着。
+             maven.compiler.source/target 与两个 encoding 则相反：父链面值与本仓逐字节相同
+             （8 / 8 / UTF-8 / UTF-8，现读 z-boot-parent/pom.xml:56-59）⇒ 属性删掉，由 parent 下发。 -->
         <java.version>8</java.version>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- Dependency Versions -->
-        <!-- 2026-09-28「同坐标单版本」：4.1.108.Final → 4.1.138.Final，与 z-boot-dependencies 1.0.18 的
-             netty-bom 同一口径（4.1.138 含 CVE 修复，4.1.x 内二进制兼容）。 -->
-        <netty.version>4.1.138.Final</netty.version>
-        <z-util.version>1.0.13</z-util.version>
-        <spring-boot.version>2.7.18</spring-boot.version>
-        <jackson-bom.version>2.18.6</jackson-bom.version>
+        <!-- 2026-09-28 迁移到 z-boot-parent：下面这六格与父链**同值**，已删，由 parent 供给；
+             本仓 DM 里原先引用它们的地方继续按属性名写（属性从父链继承，不需要本仓定义）：
+             netty.version=4.1.138.Final / jackson 走 floor 的 jackson.version=2.18.6 /
+             log4j2.version=2.25.4 / spring-boot.version=2.7.18 / commons-lang3.version=3.18.0 /
+             z-util.version=1.0.13（fleet 的 z-util.* 格同值，两个模块里的 <version> 一并删掉）。
+             留着的四格都是**分歧或父链不供给**：
+               guava 本仓 33.6.0-jre vs 地板 32.0.0-jre（删了就降级，且必须走 DM 直接条目才顶得住
+               继承来的 32.0.0，见下面 <dependencyManagement> 那条）；
+               slf4j 2.0.12 / logback 1.5.34 父链没有对应受管项（地板靠 spring-boot-dependencies 2.7.18
+               给的是 1.7.36 / 1.2.12，本仓刻意抬到 slf4j 2.x 线）；
+               fastjson2 2.0.47 父链不供给（当前无 <version> 引用它，留着是家族口径的登记位）。 -->
+        <guava.version>33.6.0-jre</guava.version>
         <slf4j.version>2.0.12</slf4j.version>
-        <log4j2.version>2.25.4</log4j2.version>
         <logback.version>1.5.34</logback.version>
         <fastjson2.version>2.0.47</fastjson2.version>
-        <guava.version>33.6.0-jre</guava.version>
-        <commons-lang3.version>3.18.0</commons-lang3.version>
 
-        <!-- Test Dependencies -->
+        <!-- Test Dependencies（父链给的是 junit-bom 5.9.3 / Boot 2.7.18 的 mockito 4.5.1、
+             assertj 3.22.0，本仓三个家族都要抬 → 键留着，且按坐标写直接条目，见 DM 那段） -->
         <junit.version>5.10.2</junit.version>
         <mockito.version>4.11.0</mockito.version>
         <assertj.version>3.27.7</assertj.version>
 
-        <!-- Plugin Versions -->
+        <!-- Plugin Versions：这三格是**插件版本**，dependencyManagement 管不到插件，走 <build> 里
+             的显式 <version>（下面 pluginManagement 自己覆盖）：compiler 3.12.1 vs parent 3.11.0、
+             surefire/failsafe 3.2.5 vs parent 2.22.2、jacoco 0.8.11 vs parent 链的 0.8.7。
+             parent 下发的 pluginManagement 只覆盖 compiler/surefire/failsafe/jar/resources，
+             jar 与 resources 本仓没有分歧 ⇒ 这两格不写版本号，直接吃 parent 的 3.3.0 / 3.3.1。 -->
         <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.2.5</maven-failsafe-plugin.version>
@@ -98,7 +116,21 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Internal Modules -->
+            <!-- Internal Modules —— 9 条（聚合 pom + 8 个 jar 模块）全部钉 ${project.version}。
+                 这一格不是装饰：继承来的 DM 会改写**传递依赖**的版本，而 fleet 里 z-mq 那 8 条钉的是
+                 repo1 上已发布的 1.3.0（现读 z-boot-fleet:1.0.0 `<z-mq.version>1.3.0</z-mq.version>`）。
+                 本仓当前 revision 也是 1.3.0，所以这一版**恰好**看不出差别——但只要这里抬到 1.3.1
+                 而 fleet 还没跟着发，broker/client 的 tree 就会把 1.3.0 的旧字节码当 sibling 编进来
+                 （z-cache 试点实测踩过：shade 包把 1.3.5 打进 1.3.6 的包里）。
+                 `z-mq` 这条聚合 pom 坐标 fleet 没有，写上是把 9 个 reactor 坐标一次钉严；
+                 它 packaging=pom ⇒ 条目必须带 <type>pom</type>（受管项按 g:a:type:classifier 匹配，
+                 不带 type 的那条挂在根本不存在的 jar 坐标上），与 z-rpc 同一写法。 -->
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-mq</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
             <dependency>
                 <groupId>io.github.yuku123</groupId>
             <artifactId>z-mq-common</artifactId>
@@ -140,60 +172,47 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Log4j2 BOM —— 必须排在 spring-boot-dependencies 之前。
-                 import 进来的 BOM 无法用 property 覆盖，而 boot 2.7.18 把 log4j2 钉在 2.17.2：
-                 模块只用 log4j-api 2.25.4、传递进来的 log4j-core 却被压到 2.17.2，
-                 两者一撞就是 NoSuchMethodError: LoaderUtil.getClassLoaders()（类初始化即失败，整套件跑不进 JVM）。 -->
-            <dependency>
-                <groupId>org.apache.logging.log4j</groupId>
-                <artifactId>log4j-bom</artifactId>
-                <version>${log4j2.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- Jackson BOM —— 同样必须排在 spring-boot-dependencies 之前。
-                 不钉它时 core/annotations 由谁决定要看父 pom：250 上 8 月那份 z-opc 父 pom 零条 jackson 声明，
-                 core 被 Boot 压到 2.13.5 而 databind 仍是模块自钉的 2.18.6，
-                 结果 NoSuchMethodError: BufferRecycler.releaseToPool()（z-mq-common 8 例全红）。
-                 import BOM 后三件套一起出 2.18.6，模块里的显式 <version> 也就没必要再留。 -->
-            <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson-bom.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- Netty BOM —— 必须排在 spring-boot-dependencies 之前：实测把 import 放在 Boot 之后会输，
-                 同一个 pom 里先声明的 import 才赢（下面是量出来的结论，不是推测）。
-                 只钉 io.netty:netty-all 也不够：netty-all 4.1.108 的 jar 实测 4516 字节、0 个 class，
-                 真正的类全在它带的 30 个分件里，而分件被 Boot 2.7.18 改写成 4.1.101 ——
-                 即"升到 4.1.108"从未生效，101→108 之间的修复一个没拿到。 -->
-            <dependency>
-                <groupId>io.netty</groupId>
-                <artifactId>netty-bom</artifactId>
-                <version>${netty.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- JUnit BOM —— 同样必须排在 spring-boot-dependencies 之前。
-                 junit-jupiter 聚合壳钉 5.10.2 而 jupiter-api/engine/params 被 Boot 压到 5.8.2，
-                 实际跑的始终是 5.8.2（dependency:tree 里 5.10.2 的 api 一个都不存在）。 -->
+            <!-- 删掉四条 import 的实测代价（两遍 dependency:tree 对着 diff 过：coord 行 106 → 102，
+                 diff 22 行 = 4 件消失 + 9 件换版，共 13 个坐标）。这四条 import 以前既是"版本来源"
+                 也是"挡在父链前面的盾"，盾一撤，地板那几格就说话了 —— 漂移全部落在**本仓从未声明过**
+                 的坐标上。逐条根因（面值现读 floor 1.0.18 与 1.0.19 两个 pom，这两版下面这四格一字未改
+                 ⇒ 漂移来自"撤盾"而不是"抬地板"）：
+                   1) org.springframework:spring-* 7 件 5.3.31 → 5.3.39
+                      ← floor 在 spring-boot-dependencies 之前 import 了 spring-framework-bom
+                        （spring-framework.version=5.3.39），Boot 2.7.18 自带的 5.3.31 被压掉；
+                   2) com.jayway.jsonpath:json-path 2.7.0 → 2.9.0、net.minidev:json-smart 2.4.11 → 2.4.9
+                      ← floor 对这两个坐标有**直接**条目（json-smart.version=2.4.9），两件都只在
+                        z-mq-spring-boot-starter 的 test 线上；json-smart 这一格地板给的面值比 Boot
+                        自己的 2.4.11 **低**，是地板侧的问题，不在本仓顺手改，已单独报 CEO；
+                   3) ch.qos.logback:logback-classic / logback-core、org.apache.logging.log4j:log4j-to-slf4j、
+                      org.slf4j:jul-to-slf4j 四件从 z-mq-spring-boot-starter 的 compile 线消失
+                      （spring-boot-starter-logging 本身还在，只是被清空成不带任何孩子的空壳）
+                      ← floor 的 spring-boot-starter-logging 条目挂了 <exclusion>*:*</exclusion>，
+                        即组织口径"Boot 不许往里塞 logback 与桥接件"；本仓主码 100% 走 log4j-api，
+                        基线那侧还躺着一对坏配对（logback-classic 1.5.34 + logback-core 1.2.12），撤掉是收敛。
+                        代价是本仓 logback-classic 那条受管项此后**没有读者**了（slf4j-api 仍有读者，
+                        经 log4j-slf4j2-impl 与 z-util 传进来）；按"父链不供给就留着"的口径不删属性，
+                        也不越界去覆盖地板的排除。
+                 本仓声明过的坐标零漂移：netty 29 件（28 件 4.1.138.Final + remoting 那条历史字面量
+                 4.1.108 保持原样，动它就是换版本，不属于这一轮）、jackson 4 件 2.18.6、log4j-api/core/slf4j2-impl
+                 2.25.4、guava 33.6.0-jre、junit 家族 5.10.2/1.10.2/1.3.0、mockito 4.11.0、assertj 3.27.7、
+                 slf4j-api 2.0.12、snakeyaml 2.0、9 个自家坐标 1.3.0。
+                 `mvn -B clean test` 前后同为 659 run / 0 F / 0 E / 0 S
+                 （逐模块 92/82/85/59/126/184/16/15 全等）。 -->
+            <!-- JUnit BOM —— 5 条 import 里只留这一条：其余四条（log4j-bom / jackson-bom / netty-bom /
+                 spring-boot-dependencies）与父链同值，已删，由 floor 自己的 import 供给
+                 （floor:1.0.19 现读 netty-bom=4.1.138.Final、jackson-bom=2.18.6、
+                 spring-boot-dependencies=2.7.18；log4j 走地板那 5 条直接条目=2.25.4）。
+                 junit 这一条**不能删**：父链经 z-boot-dependencies import 的是 junit-bom 5.9.3，
+                 本仓要 5.10.2。⚠ 而光靠这条 import 顶不住——"继承来的直接 DM 条目"优先级高于
+                 "本仓 import 进来的 BOM"（z-cache 试点实测），所以下面同时按坐标写**直接**条目，
+                 那 6 条才是真正生效的尺；import 留着是家族口径的声明。
+                 逐条面值取自 junit-bom:5.10.2 自己的 pom（jupiter 5.10.2 / platform 1.10.2 /
+                 opentest4j 1.3.0），不是抄的。 -->
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
                 <version>${junit.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- Spring Boot BOM -->
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -216,6 +235,26 @@
                 <artifactId>logback-classic</artifactId>
                 <version>${logback.version}</version>
             </dependency>
+            <!-- log4j-slf4j2-impl：地板把 log4j-api / -core / -jul / -slf4j-impl / -to-slf4j 五条
+                 **直接**钉在 2.25.4，但没有 slf4j2-impl 这一条，而 Boot 2.7.18 那侧 import 的
+                 log4j-bom 是 2.17.2、里面压根没有 log4j-slf4j2-impl（实测 grep 命中 0）
+                 ⇒ 删掉本仓的 log4j-bom import 后这一条没有任何受管项，必须自己按坐标钉，
+                 否则 client/nameserver/store 三个模块直接解析失败。
+                 面值用继承来的属性 log4j2.version（地板=2.25.4，与本仓迁移前逐字节相同）。 -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j2-impl</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+
+            <!-- snakeyaml：旧 com.zifang:z-opc 父 pom 里有一条直接钉 2.0（CVE-2022-1471 那一串），
+                 新父链（floor）没有对应受管项、只跟着 spring-boot-dependencies 2.7.18 给 1.30
+                 ⇒ 不补这一条就静默降版本。与 z-cache 试点同一处理，口径待 CEO 判前先在仓内保住不掉。 -->
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>2.0</version>
+            </dependency>
 
             <!-- Utilities -->
             <dependency>
@@ -229,11 +268,53 @@
                 <version>${commons-lang3.version}</version>
             </dependency>
 
-            <!-- Test Dependencies -->
+            <!-- Test Dependencies —— junit 家族这 6 条是"顶住继承来的 5.9.3/1.9.3/1.2.0"的直接条目：
+                 模块里引的是 junit-jupiter 聚合壳，api/engine/params 与 platform、opentest4j 全是它的
+                 传递依赖，正是受管项改写的对象（本仓 pom 早年的注释就记着"5.10.2 的 api 一个都不存在"
+                 那一类事故）。apiguardian-api 两侧都是 1.1.2，不重复钉。
+                 mockito / assertj 父链只经 Boot 2.7.18 给 4.5.1 / 3.22.0，本仓抬到 4.11.0 / 3.27.7，
+                 同样是靠"本仓直接条目压过继承条目"这一条尺（byte-buddy 1.12.23 / objenesis 2.6 是
+                 地板与 Boot 共同的面值，没分歧，不写）。 -->
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-commons</artifactId>
+                <version>1.10.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-engine</artifactId>
+                <version>1.10.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.opentest4j</groupId>
+                <artifactId>opentest4j</artifactId>
+                <version>1.3.0</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
@@ -269,6 +350,19 @@
     </dependencies>
 
     <build>
+        <!-- pluginManagement 这一整块保留：parent 下发的是 compiler 3.11.0 / surefire 2.22.2 /
+             failsafe 2.22.2（jacoco 0.8.7 连下发都没有），本仓三格刻意更高，靠**子覆盖父**的
+             pluginManagement 生效（插件版本走 <build>，dependencyManagement 管不到插件）。
+             ⚠ 迁移把这三格从"死配置"变成"活配置"，实测两遍构建日志（同样的 clean package 命令）：
+               compiler 3.13.0 → 3.12.1 —— 旧 com.zifang:z-opc 父 pom 把 compiler 写在 **<build><plugins>
+                        活跃条目**里（现读那份 pom，pluginManagement 里只有 spring-boot-maven-plugin），
+                        活跃条目压子覆盖，所以本仓这两年的 3.12.1 一个字都没生效过；换 z-boot-parent
+                        后父侧只有 pluginManagement，子覆盖赢，3.12.1 才是真的在用。
+               surefire 3.2.5 → 3.2.5、jacoco 0.8.11 → 0.8.11 —— 两遍同版本（父侧本来就没有活跃条目）。
+               jar 3.5.0 → 3.3.0、resources 3.4.0 → 3.3.1 —— 旧父 pom 不管这两件，跑的是 Maven 3.9.16
+                        的生命周期默认号；现在吃 parent 下发的 3.3.0 / 3.3.1，这是"统一口径"要的
+                        结果，本仓没有分歧所以不写版本号。
+             parent 另外下发的 jar / resources 版本号即上面这两个。 -->
         <pluginManagement>
             <plugins>
                 <plugin>

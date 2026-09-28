@@ -46,10 +46,11 @@
     </scm>
 
     <dependencies>
+        <!-- z-util 版本由父链的 z-boot-fleet 下发（z-util.version=1.0.13，与本仓迁移前逐字节相同），
+             这里不再自钉那条 <version> —— 本仓的 z-util.version 键已随迁移删掉。 -->
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-util-core</artifactId>
-            <version>${z-util.version}</version>
         </dependency>
 
         <dependency>
