@@ -88,7 +88,7 @@
         <dependency>
             <groupId>io.github.yuku123</groupId>
             <artifactId>z-util-parser-json</artifactId>
-            <version>${util.version}</version>
+            <version>${z-util.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
