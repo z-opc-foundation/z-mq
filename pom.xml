@@ -69,7 +69,7 @@
     <properties>
         <!-- Java Version -->
         <!-- 版本单一真源：抬号只改这一行（配下方常开 flatten，入库/发布件里落成字面量） -->
-        <revision>1.3.0</revision>
+        <revision>1.3.1</revision>
         <!-- java.version 与父链（z-boot-dependencies）的 1.8 只是**字符串**不同、语义同（javac 里
              8 与 1.8 是同义写法），但本仓有 3 处配置直接引用它：compiler 的 <source>/<target> 与
              central profile 里 javadoc 的 <source>（grep 现读，全仓 pom 之外 0 处读者，也没有任何
