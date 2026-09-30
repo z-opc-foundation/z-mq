@@ -50,7 +50,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | Topic 配置持久化 | `store/config/TopicConfigManager`（写边 `AdminBrokerProcessor`，`initialize()` 里先加载） | 重启后不重发 CREATE 也能读到原队列数（`TopicConfigRestartE2ETest`） |
 | 建 Topic 的运维通路 | `z-mq-tools`：`ZmqAdmin` + `ClusterAdmin#createTopic` → 码 5 | `ZmqAdmin` 注册的命令只有 4 条：`topicList`/`topicRoute`/`brokerList`/`createTopic` |
 | 事务消息（半消息 / 二次确认 / 回查 / 重启恢复） | `broker/processor/TransactionMessageProcessor`（201/251/250）、`transaction/TransactionStateManager`、`TransactionStateRecovery`、`TransactionCheckService`；客户端 `TransactionMQProducer` | 半消息走独立码 201（不与 200 同码分诊）；`recover()` 从 CommitLog 重建 pending 集合；broker 侧回查拿不到本地事务结论时恒返回 `UNKNOWN`，定论必须由 producer 用 251 送进来 |
-| 消费失败重投 + 死信 | `client/consumer/retry/ConsumeRetryService`（`DEFAULT_MAX_RECONSUME_TIMES = 16`）、`RetryPolicy.STEPPED/FIXED`、`DeadLetterQueue`（Topic 名 `%DLQ%{group}`）、`BrokerBackedRetryTransport` | 重投副本与死信都经真 `SEND_MESSAGE` 外投；⚠️ 死信 Topic **必须先注册**（本仓没有 autocreate 通路），见 `_doc/待办事项/feature006_dlq_topic_registration/` |
+| 消费失败重投 + 死信 | `client/consumer/retry/ConsumeRetryService`（`DEFAULT_MAX_RECONSUME_TIMES = 16`）、`RetryPolicy.STEPPED/FIXED`、`DeadLetterQueue`（Topic 名 `%DLQ%{group}`）、`BrokerBackedRetryTransport` | 重投副本与死信都经真 `SEND_MESSAGE` 外投；⚠️ 死信 Topic **必须先注册**（本仓没有 autocreate 通路），见 `_doc/007_backlog/feature006_dlq_topic_registration/` |
 | 顺序存储 + 崩溃恢复 | `store/log/CommitLog`、`MappedFile`、`MappedFileQueue`、`MessageCodec`（逐条 CRC） | `CommitLog.load()` 无条件全量扫描重建内存索引；`MAX_MESSAGE_SIZE = 4 MiB`，`mappedFileSizeCommitLog = 1 GiB` |
 | 同步刷盘 / 异步刷盘 | `store/log/FlushDiskType`（默认 `ASYNC_FLUSH`）、`MessageStoreConfig.syncFlushTimeout = 5000` | 同步刷盘超时 ⇒ broker 明确回 `SendStatus.FLUSH_DISK_TIMEOUT` |
 | Slave 元数据同步 | `broker/slave/SlaveSynchronize` + `outapi/BrokerOutAPI`（320/321/322/323/324），`brokerId != 0` 时启动，默认 30s 一轮 | 同步的是 TopicConfig / ConsumerOffset / DelayOffset / 版本号；订阅组那份是空 wrapper（源码自陈 MVP 未实现） |
@@ -65,10 +65,10 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | "✅ 广播消费（`MessageModel.BROADCASTING`）" | `DefaultMQPushConsumer` 存了 `messageModel` 字段、只有 getter/setter；`doPull()` 注释自陈"集群模式：当前简化实现也拉取所有队列" ⇒ 同组多实例各自消费全量，**效果既不是集群也不是广播** |
 | "✅ 顺序消息（全局/局部顺序，通过 `MessageQueueSelector`）" | 没有 `MessageQueueSelector` 这个类型；rebalance 策略类（`AllocateMessageQueueAveragely`/`ConsistentHash`）只有单测读者、没接进消费者；`MessageListener.Orderly` 有分发分支，但推送消费是单线程串行，既没有队列锁也没有 per-queue 线程 |
 | "✅ 批量消息（单批 ≤ 4MiB / ≤ 1024 条）" | `common/message/BatchMessage` 在 `src/main`/`src/test` 均无读者，命令字 `SEND_BATCH_MESSAGE(202)` 零引用 ⇒ 无批量通路 |
-| "✅ Producer 自动重试（默认 3 次，可配）" | producer 侧没有任何重试次数/退避字段，`SendResult` 一次定论；`latency/LatencyFaultTolerance` 两类的读者只有测试。未覆盖面已登记在 `_doc/待办事项/feature012_producer_retry_uncovered_shapes/`（该条登记的代码当时在 wip 工作树，`main` 上现测仍是 0 命中） |
+| "✅ Producer 自动重试（默认 3 次，可配）" | producer 侧没有任何重试次数/退避字段，`SendResult` 一次定论；`latency/LatencyFaultTolerance` 两类的读者只有测试。未覆盖面已登记在 `_doc/007_backlog/feature012_producer_retry_uncovered_shapes/`（该条登记的代码当时在 wip 工作树，`main` 上现测仍是 0 命中） |
 | "✅ 消息轨迹（Trace 全链路）" | `common/trace/TraceService`/`TraceBean`/`TraceType` 的引用只在 `z-mq-common` 自己包内，producer/broker/consumer 一条都不上报 |
-| "✅ ACL 访问控制（`aclEnable=true`）" | `remoting/acl/AccessValidator` + `broker/acl/PlainTextAccessValidator` 存在，但没有任何处理器调用它，也没有 `aclEnable` 这个开关（全仓 0 命中）；等拍板见 `_doc/待办事项/feature001_acl/` |
-| "✅ Master-Slave 同步双写（`SYNC_MASTER`）/ 自动故障切换" | 全仓**没有** `BrokerRole` 类型（只有 `brokerId == 0` 判 master）；`HAService#waitForSlaveAck` 的读者只有 `HAServiceTest`；`DefaultHAService#pushToSlave` 是只打 debug 日志的桩（源码注释"MVP 简化: 不通过 Netty 推送"），`HA_PUSH_COMMITLOG(350)` 零引用；`SendStatus.FLUSH_SLAVE_TIMEOUT`/`SLAVE_NOT_AVAILABLE` 两个枚举值无人产出 ⇒ **主从只同步元数据，消息字节不复制，也没有同步双写语义**；等拍板见 `_doc/待办事项/feature002_sync_master/` |
+| "✅ ACL 访问控制（`aclEnable=true`）" | `remoting/acl/AccessValidator` + `broker/acl/PlainTextAccessValidator` 存在，但没有任何处理器调用它，也没有 `aclEnable` 这个开关（全仓 0 命中）；等拍板见 `_doc/007_backlog/feature001_acl/` |
+| "✅ Master-Slave 同步双写（`SYNC_MASTER`）/ 自动故障切换" | 全仓**没有** `BrokerRole` 类型（只有 `brokerId == 0` 判 master）；`HAService#waitForSlaveAck` 的读者只有 `HAServiceTest`；`DefaultHAService#pushToSlave` 是只打 debug 日志的桩（源码注释"MVP 简化: 不通过 Netty 推送"），`HA_PUSH_COMMITLOG(350)` 零引用；`SendStatus.FLUSH_SLAVE_TIMEOUT`/`SLAVE_NOT_AVAILABLE` 两个枚举值无人产出 ⇒ **主从只同步元数据，消息字节不复制，也没有同步双写语义**；等拍板见 `_doc/007_backlog/feature002_sync_master/` |
 | "✅ Prometheus 指标 + Grafana Dashboard 模板" | `broker/metrics/BrokerMetrics`（含 `toPrometheusFormat()`）**零调用方**，仓里没有任何 HTTP 端口、没有 actuator、没有 dashboard 文件 |
 | "✅ 可视化控制台（React + Vite + AntD，端口 8080）" | 实际是 **Vue 3 + Element Plus + Pinia + ECharts**，Vite dev 端口 **8081**；且 `src/api/index.ts` 自陈"当前 MVP 提供 mock 数据"，代理目标 `z-mq-broker-admin:9090` **在本仓不存在**（没有任何 REST 服务端） |
 | "✅ Topic 自动创建 / 队列数动态调整" | 全仓 0 处 `autoCreate`；`SendMessageProcessor` 根本不查 `TopicConfig`（写了不报错），但路由只认已在 NameServer 注册过的 topic ⇒ 不给 5 号命令字建 topic，客户端就报 `No route for topic` |
@@ -84,7 +84,7 @@ z-mq/
 ├── pom.xml                     # 聚合 POM：parent=z-boot-parent:1.0.21，<revision>=1.3.1，8 个 module
 ├── README.md                   # 本文件
 ├── LICENSE                     # MIT
-├── sonatype-limit-request-email.txt   # 一封纯文本邮件草稿：向 Sonatype 申请提高发布配额（不是配置，也不是代码）
+├── _doc/006_release/sonatype-limit-request-email.txt   # 一封纯文本邮件草稿：向 Sonatype 申请提高发布配额（不是配置，也不是代码）
 ├── z-mq-common/                # 协议 POJO 与共享类型（26 个 main 类）
 │   └── com/zifang/z/mq/common/ #   TopicConfig/QueueData/BrokerData/TopicRouteData/MessageQueue、
 │                               #   message/{Message,MessageExt,MessageModel,BatchMessage}、
@@ -367,7 +367,7 @@ mvn verify               # surefire + failsafe + jacoco report
   （`PerformanceBenchmarkTest`、`ConcurrentChannelCacheBenchmarkTest`），因为挂钟阈值断言
   "同代码两次跑一次红一次绿"，一红就让后面 6 个模块不执行。`-Pperf` 才跑 ⇒ 别把默认绿当性能证明。
 - **同机并跑会撞端口**：至少 5 个真起监听的测试类把端口写死（登记于
-  [`_doc/待办事项/feature009_test_port_collision/001_待排产归属.md`](_doc/待办事项/feature009_test_port_collision/001_待排产归属.md)），
+  [`_doc/007_backlog/feature009_test_port_collision/001_待排产归属.md`](_doc/007_backlog/feature009_test_port_collision/001_待排产归属.md)），
   实测曾整类吞掉 `HAServiceTest`；换 `freePort()` 也只是降概率（TOCTOU）。
 - **已知的真实红**：位点提交被静默吞（`feature010`）、偶发"通道已建好但一次请求 10s 无响应"（`feature011`，
   怀疑 JVM 停顿）—— 都还没排产修，跑全量遇到时**别归因到自己这次的改动**。
@@ -384,11 +384,11 @@ mvn verify               # surefire + failsafe + jacoco report
   `.gitignore` 排除**，README 不复述其值。判"是否对外可见"只认 repo1 回读（且要用 ranged GET），
   `BUILD SUCCESS` 不等于已上线。
 - flatten 常开（1.5.0）：入库/发布件里 `${revision}` 落成字面量，消费方拿不到悬空 parent。
-- 根目录 [`sonatype-limit-request-email.txt`](sonatype-limit-request-email.txt) 是一封**邮件草稿纯文本**
+- 根目录 [`_doc/006_release/sonatype-limit-request-email.txt`](_doc/006_release/sonatype-limit-request-email.txt) 是一封**邮件草稿纯文本**
   （向 Sonatype 申请提高发布配额/豁免复核），不是配置、不是构建输入，请勿改名接入构建。
   同题材的可执行版本在 `_doc/003_script/send_email_to_sonatype.py`（该脚本把 SMTP 账号口令硬编码在源码里，
   属于待整改项：**不要把它的任何值抄进任何文档或 README**）。
-- ⚠️ 一处版本口径待纠：`_doc/待办事项/feature003_release_1_3_0/` 成文时 repo1 上 `1.3.0` 还是 404；
+- ⚠️ 一处版本口径待纠：`_doc/007_backlog/feature003_release_1_3_0/` 成文时 repo1 上 `1.3.0` 还是 404；
   本次实测 `1.3.0` 与 `1.3.1` **九个坐标全为 200**，`z-boot-fleet` 也已把 `<z-mq.version>` 抬到 `1.3.1`
   —— 那份待办文档与根 pom 注释里"fleet 钉 1.3.0"的说法都已经过期，以本节读数为准。
 
@@ -423,8 +423,8 @@ _Maintained by the z-opc-foundation organization._
   - [`ZMQ_VS_ROCKETMQ.md`](_doc/001_arch/ZMQ_VS_ROCKETMQ.md) — **对 RocketMQ 的能力差距分析，与代码最一致的一份**
     （它已点明"缺 ConsumeQueue / IndexFile"）；只看 `001_arch` 就看这份
   - [`z-mq-admin.md`](_doc/001_arch/z-mq-admin.md) — 控制台设计稿（Vue 3 + Element Plus，8081 → 9090 代理拓扑）
-  - 空目录如实记录：[`_doc/002_deploy/`](_doc/002_deploy/) 与
-    [`_doc/004_skill/`](_doc/004_skill/) **目前都是空目录**（没有部署文档、没有 SQL、没有 skill）
+  - 空目录如实记录：`_doc/002_deploy/` 与
+    `_doc/004_skill/` **目前都是空目录**（没有部署文档、没有 SQL、没有 skill）
 
 - [`_doc/003_script/`](_doc/003_script/) — 脚本：
   - [`deploy_maven_center.sh`](_doc/003_script/deploy_maven_center.sh) — Maven Central 发布入口（publish/verify/gpg-init）
@@ -434,20 +434,20 @@ _Maintained by the z-opc-foundation organization._
   - [`push.sh`](_doc/003_script/push.sh) — `git add . && git commit -m add && git push`（三行偷懒脚本，会全量 add，慎用）
   - [`send_email_to_sonatype.py`](_doc/003_script/send_email_to_sonatype.py) — 配额申请邮件的发送脚本（内含硬编码 SMTP 凭证，值不入文档）
 
-- [`_doc/待办事项/`](_doc/待办事项/) — 非标准命名的**待拍板/待排产登记册**（不在 `001-004` 四类里，
+- [`_doc/007_backlog/`](_doc/007_backlog/) — 非标准命名的**待拍板/待排产登记册**（不在 `001-004` 四类里，
   如实描述：每格一个 `featureNNN_*/001_*.md`，写"广告原文 vs 实测兑现、等谁拍什么"）。
-  索引先读 [`README.md`](_doc/待办事项/README.md)：
-  - [`feature001_acl/001_待裁定.md`](_doc/待办事项/feature001_acl/001_待裁定.md) — ACL 是否要做
-  - [`feature002_sync_master/001_待裁定.md`](_doc/待办事项/feature002_sync_master/001_待裁定.md) — 同步双写口径
-  - [`feature003_release_1_3_0/001_待点头.md`](_doc/待办事项/feature003_release_1_3_0/001_待点头.md) — 发布树选择（现状见上文「发布与配额」）
-  - [`feature004_transaction_check/001_等证据后裁定.md`](_doc/待办事项/feature004_transaction_check/001_等证据后裁定.md) — 事务回查语义
-  - [`feature005_metadata_lifecycle/001_待排产.md`](_doc/待办事项/feature005_metadata_lifecycle/001_待排产.md) — `DataVersion` 恒 0、`DELETE_TOPIC` 空号、零引用命令字
-  - [`feature006_dlq_topic_registration/001_待裁定.md`](_doc/待办事项/feature006_dlq_topic_registration/001_待裁定.md) — 死信 Topic 谁来注册
-  - [`feature007_dlq_read_side/001_待排产归属.md`](_doc/待办事项/feature007_dlq_read_side/001_待排产归属.md) — 死信读侧
-  - [`feature008_batch_commit_coupling/001_待裁定.md`](_doc/待办事项/feature008_batch_commit_coupling/001_待裁定.md) — 失败批次位点整批判定
-  - [`feature009_test_port_collision/001_待排产归属.md`](_doc/待办事项/feature009_test_port_collision/001_待排产归属.md) — 测试端口写死
-  - [`feature010_push_offset_silent_commit_failure/001_待排产归属.md`](_doc/待办事项/feature010_push_offset_silent_commit_failure/001_待排产归属.md) — 位点提交静默失败
-  - [`feature011_jvm_pause_drops_broker_response/001_待排产归属.md`](_doc/待办事项/feature011_jvm_pause_drops_broker_response/001_待排产归属.md) — 偶发 10s 无响应
-  - [`feature012_producer_retry_uncovered_shapes/001_待排产归属.md`](_doc/待办事项/feature012_producer_retry_uncovered_shapes/001_待排产归属.md) — producer 重试未覆盖面
+  索引先读 [`README.md`](_doc/007_backlog/README.md)：
+  - [`feature001_acl/001_待裁定.md`](_doc/007_backlog/feature001_acl/001_待裁定.md) — ACL 是否要做
+  - [`feature002_sync_master/001_待裁定.md`](_doc/007_backlog/feature002_sync_master/001_待裁定.md) — 同步双写口径
+  - [`feature003_release_1_3_0/001_待点头.md`](_doc/007_backlog/feature003_release_1_3_0/001_待点头.md) — 发布树选择（现状见上文「发布与配额」）
+  - [`feature004_transaction_check/001_等证据后裁定.md`](_doc/007_backlog/feature004_transaction_check/001_等证据后裁定.md) — 事务回查语义
+  - [`feature005_metadata_lifecycle/001_待排产.md`](_doc/007_backlog/feature005_metadata_lifecycle/001_待排产.md) — `DataVersion` 恒 0、`DELETE_TOPIC` 空号、零引用命令字
+  - [`feature006_dlq_topic_registration/001_待裁定.md`](_doc/007_backlog/feature006_dlq_topic_registration/001_待裁定.md) — 死信 Topic 谁来注册
+  - [`feature007_dlq_read_side/001_待排产归属.md`](_doc/007_backlog/feature007_dlq_read_side/001_待排产归属.md) — 死信读侧
+  - [`feature008_batch_commit_coupling/001_待裁定.md`](_doc/007_backlog/feature008_batch_commit_coupling/001_待裁定.md) — 失败批次位点整批判定
+  - [`feature009_test_port_collision/001_待排产归属.md`](_doc/007_backlog/feature009_test_port_collision/001_待排产归属.md) — 测试端口写死
+  - [`feature010_push_offset_silent_commit_failure/001_待排产归属.md`](_doc/007_backlog/feature010_push_offset_silent_commit_failure/001_待排产归属.md) — 位点提交静默失败
+  - [`feature011_jvm_pause_drops_broker_response/001_待排产归属.md`](_doc/007_backlog/feature011_jvm_pause_drops_broker_response/001_待排产归属.md) — 偶发 10s 无响应
+  - [`feature012_producer_retry_uncovered_shapes/001_待排产归属.md`](_doc/007_backlog/feature012_producer_retry_uncovered_shapes/001_待排产归属.md) — producer 重试未覆盖面
 
 各文档详细说明见各子目录。
