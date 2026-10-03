@@ -1,3 +1,4 @@
 # Z-MQ Spring Boot Auto Configuration
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  com.zifang.z.mq.spring.autoconfigure.ZmqAutoConfiguration
+  com.zifang.z.mq.spring.autoconfigure.ZmqAutoConfiguration,\
+  com.zifang.z.mq.spring.host.MqHostAutoConfiguration

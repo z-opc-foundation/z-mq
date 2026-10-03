@@ -70,12 +70,37 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- host 桥接类（proxy controller / embedded server config）编译期需要，运行期由宿主供 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <version>2.7.18</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- 2026-10-03: host/ 包 (MqProxyController / ZMqEmbeddedServerConfig / ZMqTopicBootstrap,
+             自 z-opc main-starter 平移) 的宿主侧依赖, 全部 provided —— 由宿主运行时供:
+             web (RestController) / servlet / slf4j 由 spring-boot-starter 传递已有 web 之外的
+             spring-core; 这里补 webmvc + servlet-api. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <version>5.3.31</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>4.0.1</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
