@@ -15,8 +15,8 @@ z-mq（消息中心）是系统的异步消息中枢，为各模块提供可靠�
 ## 1.3 模块关系
 
 ```
-z-wf（审批完成通知）───► z-mq ──► z-task（创建跟进任务）
-z-task（任务完成）───► z-mq ──► z-wf（更新审批状态）
+z-camuda（审批完成通知）───► z-mq ──► z-task（创建跟进任务）
+z-task（任务完成）───► z-mq ──► z-camuda（更新审批状态）
 z-schedule（任务执行失败）───► z-mq ──► z-ctc（发送告警通知）
 z-ctc-audit-starter（审计事件）───► z-mq ──► z-ctc（异步存储）
 ```
