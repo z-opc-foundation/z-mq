@@ -133,16 +133,16 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
 
         // 读取消息（比请求数量多读一些，用于过滤后仍有足够消息）
         MessageFilter filter = createFilter(filterTypeStr, filterExpression);
-        List<MessageExt> messages = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
+        Scan scan = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
 
         // 长轮询: 只有"这个 offset 确实读不到消息"且"请求带了挂起预算"时才挂起
         // (PullRequestHoldService#suspendPull 的 javadoc 要求调用者先确认这一点)
-        if (messages.isEmpty() && suspendBudgetMillis > 0) {
-            messages = suspendAndReread(commitLog, topic, queueId, offset, maxNum, filter,
+        if (scan.messages.isEmpty() && suspendBudgetMillis > 0) {
+            scan = suspendAndReread(commitLog, topic, queueId, offset, maxNum, filter,
                     suspendBudgetMillis, response);
         }
 
-        return fillPullResponse(response, commitLog, topic, queueId, offset, messages);
+        return fillPullResponse(response, commitLog, topic, queueId, offset, scan);
     }
 
     /**
@@ -160,9 +160,9 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
      *
      * @return 挂起/超时并重读之后的消息列表 (可能仍为空)
      */
-    private List<MessageExt> suspendAndReread(CommitLog commitLog, String topic, int queueId, long offset,
-                                              int maxNum, MessageFilter filter, long suspendBudgetMillis,
-                                              RemotingCommand response) {
+    private Scan suspendAndReread(CommitLog commitLog, String topic, int queueId, long offset,
+                                  int maxNum, MessageFilter filter, long suspendBudgetMillis,
+                                  RemotingCommand response) {
         PullRequestHoldService holdService = brokerController.getPullRequestHoldService();
         if (holdService == null || !holdService.isStarted()) {
             // 挂起的"到点必醒"由 hold 服务的扫描线程兑现; 它没在跑就不能挂, 否则这条 pull 线程
@@ -170,7 +170,7 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
             response.addExtField(EXT_SUSPEND_WAKEUP, WAKEUP_HOLD_NOT_STARTED);
             log.warn("pull long-polling requested (budget={}ms) but PullRequestHoldService is not started, "
                     + "respond immediately: topic={} queueId={} offset={}", suspendBudgetMillis, topic, queueId, offset);
-            return java.util.Collections.emptyList();
+            return Scan.none(offset);
         }
 
         long holdMillis = Math.min(suspendBudgetMillis, MAX_SUSPEND_BUDGET_MILLIS);
@@ -181,15 +181,15 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
             response.addExtField(EXT_SUSPEND_WAKEUP, WAKEUP_TABLE_FULL);
             log.warn("suspend rejected (hold table full), respond immediately: topic={} queueId={} offset={}",
                     topic, queueId, offset);
-            return java.util.Collections.emptyList();
+            return Scan.none(offset);
         }
 
         // 补一次读: 关掉"我第一次读 → 登记挂起"这段窗口里消息已经写进来的丢唤醒可能。
         // 看到了消息就自己 notifyMessageArrived —— 那既是"消息确实到了"的事实, 也顺手把自己和别人
         // 在该队列上的登记摘掉 (notify 是唯一能把 holdTable 条目整个清掉的外部入口;
         // 直接 wakeupByTimeout 会留下 released=true 的僵尸条目, 扫描线程再也摘不掉它)。
-        List<MessageExt> reread = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
-        if (!reread.isEmpty()) {
+        Scan reread = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
+        if (!reread.messages.isEmpty()) {
             holdService.notifyMessageArrived(topic, queueId);
             response.addExtField(EXT_SUSPEND_WAKEUP, WAKEUP_ARRIVED_WHILE_SUSPENDING);
             return reread;
@@ -210,40 +210,83 @@ public class PullMessageProcessor implements NettyRemotingAbstract.NettyRequestP
 
         response.addExtField(EXT_SUSPEND_WAKEUP, wokenByMessage ? WAKEUP_BY_MESSAGE : WAKEUP_BY_TIMEOUT);
         // 无论被消息叫醒还是到点自己醒, 都只重读一次再返回
-        List<MessageExt> afterWakeup = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
+        Scan afterWakeup = readAndFilter(commitLog, topic, queueId, offset, maxNum, filter);
         if (log.isDebugEnabled()) {
             log.debug("long-polling pull woke up: topic={} queueId={} offset={} byMessage={} got={} holdMillis={}",
-                    topic, queueId, offset, wokenByMessage, afterWakeup.size(), holdMillis);
+                    topic, queueId, offset, wokenByMessage, afterWakeup.messages.size(), holdMillis);
         }
         return afterWakeup;
     }
 
     /**
-     * 按 offset 读消息并按需过滤/截断 (与接线前同一套算法, 只是被抽出来供"重读"复用).
+     * 一次扫描的结果：<b>留下的消息</b> + <b>扫到的位点</b>。
+     * <p>
+     * 两个数必须分开：带 Tag 过滤时，{@code fetchNum = maxNum * 3} 这一窗口里可能一条都不匹配，
+     * 但窗口本身已经被读过了。只回"留下的消息"会让调用方以为什么都没扫到，
+     * 于是 nextOffset 原样等于请求 offset —— 消费者下一轮从同一位点再取回同一窗、
+     * 同样全被过滤，<b>永远卡在这段不匹配的前缀上</b>（无报错、无日志，就是收不到）。
+     * <p>
+     * {@code scannedThrough} = 扫到的最后一条消息的 queueOffset + 1；一条都没扫到时等于起始 offset，
+     * 表示"确实没有更多消息"，此时不得推进。
      */
-    private List<MessageExt> readAndFilter(CommitLog commitLog, String topic, int queueId, long offset,
-                                           int maxNum, MessageFilter filter) {
-        int fetchNum = filter != null ? maxNum * 3 : maxNum;
-        List<MessageExt> messages = readMessages(commitLog, topic, queueId, offset, fetchNum);
-        if (filter != null) {
-            return applyFilter(messages, filter, maxNum);
+    private static final class Scan {
+        final List<MessageExt> messages;
+        final long scannedThrough;
+
+        Scan(List<MessageExt> messages, long scannedThrough) {
+            this.messages = messages;
+            this.scannedThrough = scannedThrough;
         }
-        // 无过滤器时截取到请求数量
-        if (messages.size() > maxNum) {
-            messages = messages.subList(0, maxNum);
+
+        /** 没扫到任何东西：扫过位点 = 起始位点（不推进）。 */
+        static Scan none(long offset) {
+            return new Scan(java.util.Collections.<MessageExt>emptyList(), offset);
         }
-        return messages;
     }
 
     /**
-     * 把一次 pull 的读数装进响应 (nextOffset/minOffset/maxOffset 的算法与接线前逐字一致).
+     * 按 offset 读消息并按需过滤/截断 (与接线前同一套算法, 只是被抽出来供"重读"复用).
+     */
+    private Scan readAndFilter(CommitLog commitLog, String topic, int queueId, long offset,
+                               int maxNum, MessageFilter filter) {
+        int fetchNum = filter != null ? maxNum * 3 : maxNum;
+        List<MessageExt> fetched = readMessages(commitLog, topic, queueId, offset, fetchNum);
+        long scannedThrough = fetched.isEmpty()
+                ? offset
+                : fetched.get(fetched.size() - 1).getQueueOffset() + 1;
+        if (filter != null) {
+            return new Scan(applyFilter(fetched, filter, maxNum), scannedThrough);
+        }
+        // 无过滤器时截取到请求数量
+        if (fetched.size() > maxNum) {
+            fetched = fetched.subList(0, maxNum);
+        }
+        return new Scan(fetched, scannedThrough);
+    }
+
+    /**
+     * 把一次 pull 的读数装进响应 (minOffset/maxOffset 的算法与接线前逐字一致).
+     * <p>
+     * nextOffset 的口径（两个分支，不能取 max）：
+     * <ul>
+     *   <li><b>有匹配消息</b> ⇒ 最后一条匹配的 +1。{@code applyFilter} 凑够 maxNum 就停扫，
+     *       窗口后半段没被看过也<b>不能</b>推进：那里可能有还没投递的匹配消息，
+     *       下一轮从这条继续读即可（反正本轮有消息，不会卡住）。</li>
+     *   <li><b>整窗全被过滤</b> ⇒ {@code scan.scannedThrough}。这一窗已被逐条判定为不匹配，
+     *       按订阅语义本就不该投给该消费者，不推进它就会永远卡在这里。</li>
+     *   <li>一条都没扫到时 {@code scannedThrough == 起始 offset}，位点原地不动，
+     *       不会跳过任何未投递消息。</li>
+     * </ul>
      */
     private RemotingCommand fillPullResponse(RemotingCommand response, CommitLog commitLog, String topic,
-                                             int queueId, long offset, List<MessageExt> messages) {
+                                             int queueId, long offset, Scan scan) {
+        List<MessageExt> messages = scan.messages;
         long maxOffset = commitLog.getQueueIndex().getMaxOffset(topic, queueId);
         long minOffset = messages.isEmpty() ? maxOffset : messages.get(0).getQueueOffset();
         // nextOffset 应为最后一条消息的 offset +1, 而非 maxOffset
-        long nextOffset = messages.isEmpty() ? offset : messages.get(messages.size() - 1).getQueueOffset() + 1;
+        long nextOffset = messages.isEmpty()
+                ? scan.scannedThrough
+                : messages.get(messages.size() - 1).getQueueOffset() + 1;
         PullResultPayload body = new PullResultPayload(topic, queueId, nextOffset, minOffset, maxOffset, messages);
         response.setBody(JsonCodec.encode(body));
         return response;

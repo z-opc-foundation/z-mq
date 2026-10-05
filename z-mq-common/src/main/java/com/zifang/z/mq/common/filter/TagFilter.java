@@ -25,8 +25,23 @@ public class TagFilter implements MessageFilter {
     /** 全匹配表达式 */
     private static final String ALL_MATCH = "*";
 
-    /** 多 Tag 分隔符 */
+    /** 多 Tag 分隔符（字面量，仅用于文档/展示） */
     private static final String TAG_SEPARATOR = "||";
+
+    /**
+     * 多 Tag 分隔符的<b>正则</b>形态。
+     * <p>
+     * {@link String#split(String)} 收的是正则，不是字面量。裸 {@code "||"} 在正则里
+     * 是「空分支 或 空分支」，匹配的是空串而不是两个竖线，于是
+     * {@code "WANTED".split("||")} 会碎成 {@code [W, A, N, T, E, D]}、
+     * {@code "TagA||TagB"} 会碎成 {@code [T, a, g, A, |, |, T, a, g, B]}，
+     * 产出的 tagSet 里根本没有完整的 Tag 名 ⇒ {@code match} 对任何消息都返回 false
+     * ⇒ <b>Broker 端 Tag 过滤永远匹配不上，带订阅的消费者一条都收不到</b>。
+     * <p>
+     * 客户端 {@code DefaultMQPushConsumer.clientSideTagFilter} 用的是 {@code "\\|\\|"}，
+     * 两侧原本并不等价（客户端对、Broker 错），这处不一致就是缺陷的藏身处。
+     */
+    private static final String TAG_SEPARATOR_REGEX = "\\|\\|";
 
     private final String expression;
     private final Set<String> tagSet;
@@ -44,7 +59,7 @@ public class TagFilter implements MessageFilter {
         if (this.allMatch) {
             this.tagSet = Collections.emptySet();
         } else {
-            String[] tags = this.expression.split(TAG_SEPARATOR);
+            String[] tags = this.expression.split(TAG_SEPARATOR_REGEX);
             this.tagSet = new HashSet<>();
             for (String tag : tags) {
                 String trimmed = tag.trim();

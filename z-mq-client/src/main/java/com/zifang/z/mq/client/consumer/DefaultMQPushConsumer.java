@@ -283,6 +283,15 @@ public class DefaultMQPushConsumer {
         }
         PullResultPayload payload = JsonCodec.decode(response.getBody(), PullResultPayload.class);
         if (payload == null || payload.getMessages() == null || payload.getMessages().isEmpty()) {
+            // 空结果不等于"什么都没扫到"。带 Tag 过滤时, broker 会按 maxNum*3 取一窗,
+            // 整窗都不匹配时它把 nextOffset 推到"扫到的位点"——那段消息按订阅语义本就不该
+            // 投给我。不把它提交掉, 下一轮就会从同一位点取回同一窗、同样全被过滤,
+            // 带过滤的消费者从此卡在这段前缀上: 无报错、无日志、就是收不到。
+            // 只在 broker 真的推进过时才提交; offset == null (首拉, 走 broker 已提交位点)
+            // 或 nextOffset 未前进时不提交, 避免无谓的写穿。
+            if (payload != null && offset != null && payload.getNextOffset() > offset.longValue()) {
+                commitOffsetThrough(brokerAddr, mq, payload.getNextOffset());
+            }
             return;
         }
 
