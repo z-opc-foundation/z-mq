@@ -437,5 +437,5 @@ export {
   we as Topics,
   Me as configureMq,
   Ie as menuItems,
-  Fe as routeTable
+  Fe as routes
 };
