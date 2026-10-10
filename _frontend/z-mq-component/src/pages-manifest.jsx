@@ -6,6 +6,7 @@ import Topics from './pages/Topics'
 export {default as Instance} from './pages/Instance'
 export {default as Topics} from './pages/Topics'
 import HomePage from './pages/HomePage'
+import MqApp from './pages/MqApp.jsx'
 
 /** 菜单 + 路由清单（lead 008 §10/§14/§16 批量落地）。App 壳在 suit 侧组装。 */
 export const appMeta = { title: 'z-mq 消息队列', short: 'z-mq' }
@@ -20,6 +21,7 @@ export const routes = [
     { path: '/z-mq/home', Component: HomePage },
     { path: '/z-mq/instance', Component: Instance },
     { path: '/z-mq/topics', Component: Topics },
+    { path: '/z-mq/:rest*', Component: MqApp },
 ]
 
 export { default as HomePage } from './pages/HomePage'
