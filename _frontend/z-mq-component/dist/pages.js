@@ -1,9 +1,10 @@
-import me, { useState as y, useEffect as V } from "react";
-import { ReloadOutlined as G, DashboardOutlined as pe, AppstoreOutlined as Ee } from "@ant-design/icons";
-import { Typography as I, Space as X, Button as H, Alert as Z, Spin as be, Row as _e, Col as N, Card as g, Statistic as C, Descriptions as z, Table as Te } from "antd";
-import { m as Q } from "./api-o8tZUY9i.js";
-import { c as Le } from "./api-o8tZUY9i.js";
-var k = { exports: {} }, j = {};
+import pe, { useState as g, useEffect as $ } from "react";
+import { ReloadOutlined as X, HomeOutlined as be, DashboardOutlined as he, AppstoreOutlined as ye } from "@ant-design/icons";
+import { Typography as A, Space as O, Button as H, Alert as Z, Spin as ge, Row as Q, Col as S, Card as j, Statistic as z, Descriptions as U, Table as xe, Tag as ve } from "antd";
+import { m as K } from "./api-o8tZUY9i.js";
+import { c as Me } from "./api-o8tZUY9i.js";
+import { useNavigate as je } from "react-router-dom";
+var k = { exports: {} }, T = {};
 /**
  * @license React
  * react-jsx-runtime.production.js
@@ -13,29 +14,29 @@ var k = { exports: {} }, j = {};
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-var J;
-function ve() {
-  if (J) return j;
-  J = 1;
-  var s = Symbol.for("react.transitional.element"), p = Symbol.for("react.fragment");
-  function d(m, c, u) {
-    var f = null;
-    if (u !== void 0 && (f = "" + u), c.key !== void 0 && (f = "" + c.key), "key" in c) {
-      u = {};
-      for (var a in c)
-        a !== "key" && (u[a] = c[a]);
-    } else u = c;
-    return c = u.ref, {
-      $$typeof: s,
+var B;
+function Ee() {
+  if (B) return T;
+  B = 1;
+  var o = Symbol.for("react.transitional.element"), u = Symbol.for("react.fragment");
+  function d(m, n, f) {
+    var p = null;
+    if (f !== void 0 && (p = "" + f), n.key !== void 0 && (p = "" + n.key), "key" in n) {
+      f = {};
+      for (var s in n)
+        s !== "key" && (f[s] = n[s]);
+    } else f = n;
+    return n = f.ref, {
+      $$typeof: o,
       type: m,
-      key: f,
-      ref: c !== void 0 ? c : null,
-      props: u
+      key: p,
+      ref: n !== void 0 ? n : null,
+      props: f
     };
   }
-  return j.Fragment = p, j.jsx = d, j.jsxs = d, j;
+  return T.Fragment = u, T.jsx = d, T.jsxs = d, T;
 }
-var R = {};
+var _ = {};
 /**
  * @license React
  * react-jsx-runtime.development.js
@@ -45,128 +46,128 @@ var R = {};
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-var U;
-function ye() {
-  return U || (U = 1, process.env.NODE_ENV !== "production" && (function() {
-    function s(e) {
+var V;
+function Te() {
+  return V || (V = 1, process.env.NODE_ENV !== "production" && (function() {
+    function o(e) {
       if (e == null) return null;
       if (typeof e == "function")
-        return e.$$typeof === ue ? null : e.displayName || e.name || null;
+        return e.$$typeof === fe ? null : e.displayName || e.name || null;
       if (typeof e == "string") return e;
       switch (e) {
-        case S:
+        case w:
           return "Fragment";
-        case re:
+        case te:
           return "Profiler";
-        case ee:
+        case re:
           return "StrictMode";
-        case oe:
-          return "Suspense";
         case se:
+          return "Suspense";
+        case ie:
           return "SuspenseList";
-        case le:
-          return "Activity";
         case ce:
+          return "Activity";
+        case ue:
           return "ViewTransition";
       }
       if (typeof e == "object")
         switch (typeof e.tag == "number" && console.error(
           "Received an unexpected object in getComponentNameFromType(). This is likely a bug in React. Please file an issue."
         ), e.$$typeof) {
-          case K:
+          case ee:
             return "Portal";
-          case ne:
-            return e.displayName || "Context";
-          case te:
-            return (e._context.displayName || "Context") + ".Consumer";
           case ae:
-            var r = e.render;
-            return e = e.displayName, e || (e = r.displayName || r.name || "", e = e !== "" ? "ForwardRef(" + e + ")" : "ForwardRef"), e;
-          case ie:
-            return r = e.displayName || null, r !== null ? r : s(e.type) || "Memo";
-          case O:
-            r = e._payload, e = e._init;
+            return e.displayName || "Context";
+          case ne:
+            return (e._context.displayName || "Context") + ".Consumer";
+          case oe:
+            var t = e.render;
+            return e = e.displayName, e || (e = t.displayName || t.name || "", e = e !== "" ? "ForwardRef(" + e + ")" : "ForwardRef"), e;
+          case le:
+            return t = e.displayName || null, t !== null ? t : o(e.type) || "Memo";
+          case P:
+            t = e._payload, e = e._init;
             try {
-              return s(e(r));
+              return o(e(t));
             } catch {
             }
         }
       return null;
     }
-    function p(e) {
+    function u(e) {
       return "" + e;
     }
     function d(e) {
       try {
-        p(e);
-        var r = !1;
+        u(e);
+        var t = !1;
       } catch {
-        r = !0;
+        t = !0;
       }
-      if (r) {
-        r = console;
-        var n = r.error, i = typeof Symbol == "function" && Symbol.toStringTag && e[Symbol.toStringTag] || e.constructor.name || "Object";
-        return n.call(
-          r,
+      if (t) {
+        t = console;
+        var a = t.error, l = typeof Symbol == "function" && Symbol.toStringTag && e[Symbol.toStringTag] || e.constructor.name || "Object";
+        return a.call(
+          t,
           "The provided key is an unsupported type %s. This value must be coerced to a string before using it here.",
-          i
-        ), p(e);
+          l
+        ), u(e);
       }
     }
     function m(e) {
-      if (e === S) return "<>";
-      if (typeof e == "object" && e !== null && e.$$typeof === O)
+      if (e === w) return "<>";
+      if (typeof e == "object" && e !== null && e.$$typeof === P)
         return "<...>";
       try {
-        var r = s(e);
-        return r ? "<" + r + ">" : "<...>";
+        var t = o(e);
+        return t ? "<" + t + ">" : "<...>";
       } catch {
         return "<...>";
       }
     }
-    function c() {
-      var e = A.A;
+    function n() {
+      var e = N.A;
       return e === null ? null : e.getOwner();
     }
-    function u() {
+    function f() {
       return Error("react-stack-top-frame");
     }
-    function f(e) {
-      if ($.call(e, "key")) {
-        var r = Object.getOwnPropertyDescriptor(e, "key").get;
-        if (r && r.isReactWarning) return !1;
+    function p(e) {
+      if (L.call(e, "key")) {
+        var t = Object.getOwnPropertyDescriptor(e, "key").get;
+        if (t && t.isReactWarning) return !1;
       }
       return e.key !== void 0;
     }
-    function a(e, r) {
-      function n() {
+    function s(e, t) {
+      function a() {
         F || (F = !0, console.error(
           "%s: `key` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://react.dev/link/special-props)",
-          r
+          t
         ));
       }
-      n.isReactWarning = !0, Object.defineProperty(e, "key", {
-        get: n,
+      a.isReactWarning = !0, Object.defineProperty(e, "key", {
+        get: a,
         configurable: !0
       });
     }
-    function o() {
-      var e = s(this.type);
+    function i() {
+      var e = o(this.type);
       return D[e] || (D[e] = !0, console.error(
         "Accessing element.ref was removed in React 19. ref is now a regular prop. It will be removed from the JSX Element type in a future release."
       )), e = this.props.ref, e !== void 0 ? e : null;
     }
-    function _(e, r, n, i, b, E) {
-      var l = n.ref;
+    function y(e, t, a, l, h, b) {
+      var c = a.ref;
       return e = {
-        $$typeof: L,
+        $$typeof: q,
         type: e,
-        key: r,
-        props: n,
-        _owner: i
-      }, (l !== void 0 ? l : null) !== null ? Object.defineProperty(e, "ref", {
+        key: t,
+        props: a,
+        _owner: l
+      }, (c !== void 0 ? c : null) !== null ? Object.defineProperty(e, "ref", {
         enumerable: !1,
-        get: o
+        get: i
       }) : Object.defineProperty(e, "ref", { enumerable: !1, value: null }), e._store = {}, Object.defineProperty(e._store, "validated", {
         configurable: !1,
         enumerable: !1,
@@ -181,216 +182,260 @@ function ye() {
         configurable: !1,
         enumerable: !1,
         writable: !0,
-        value: b
+        value: h
       }), Object.defineProperty(e, "_debugTask", {
         configurable: !1,
         enumerable: !1,
         writable: !0,
-        value: E
+        value: b
       }), Object.freeze && (Object.freeze(e.props), Object.freeze(e)), e;
     }
-    function T(e, r, n, i, b, E) {
-      var l = r.children;
-      if (l !== void 0)
-        if (i)
-          if (fe(l)) {
-            for (i = 0; i < l.length; i++)
-              x(l[i]);
-            Object.freeze && Object.freeze(l);
+    function x(e, t, a, l, h, b) {
+      var c = t.children;
+      if (c !== void 0)
+        if (l)
+          if (de(c)) {
+            for (l = 0; l < c.length; l++)
+              E(c[l]);
+            Object.freeze && Object.freeze(c);
           } else
             console.error(
               "React.jsx: Static children should always be an array. You are likely explicitly calling React.jsxs or React.jsxDEV. Use the Babel transform instead."
             );
-        else x(l);
-      if ($.call(r, "key")) {
-        l = s(e);
-        var v = Object.keys(r).filter(function(de) {
-          return de !== "key";
+        else E(c);
+      if (L.call(t, "key")) {
+        c = o(e);
+        var v = Object.keys(t).filter(function(me) {
+          return me !== "key";
         });
-        i = 0 < v.length ? "{key: someKey, " + v.join(": ..., ") + ": ...}" : "{key: someKey}", W[l + i] || (v = 0 < v.length ? "{" + v.join(": ..., ") + ": ...}" : "{}", console.error(
+        l = 0 < v.length ? "{key: someKey, " + v.join(": ..., ") + ": ...}" : "{key: someKey}", J[c + l] || (v = 0 < v.length ? "{" + v.join(": ..., ") + ": ...}" : "{}", console.error(
           `A props object containing a "key" prop is being spread into JSX:
   let props = %s;
   <%s {...props} />
 React keys must be passed directly to JSX without using spread:
   let props = %s;
   <%s key={someKey} {...props} />`,
-          i,
           l,
+          c,
           v,
-          l
-        ), W[l + i] = !0);
+          c
+        ), J[c + l] = !0);
       }
-      if (l = null, n !== void 0 && (d(n), l = "" + n), f(r) && (d(r.key), l = "" + r.key), "key" in r) {
-        n = {};
-        for (var P in r)
-          P !== "key" && (n[P] = r[P]);
-      } else n = r;
-      return l && a(
-        n,
+      if (c = null, a !== void 0 && (d(a), c = "" + a), p(t) && (d(t.key), c = "" + t.key), "key" in t) {
+        a = {};
+        for (var I in t)
+          I !== "key" && (a[I] = t[I]);
+      } else a = t;
+      return c && s(
+        a,
         typeof e == "function" ? e.displayName || e.name || "Unknown" : e
-      ), _(
+      ), y(
         e,
-        l,
-        n,
-        c(),
-        b,
-        E
+        c,
+        a,
+        n(),
+        h,
+        b
       );
     }
-    function x(e) {
-      Y(e) ? e._store && (e._store.validated = 1) : typeof e == "object" && e !== null && e.$$typeof === O && (e._payload.status === "fulfilled" ? Y(e._payload.value) && e._payload.value._store && (e._payload.value._store.validated = 1) : e._store && (e._store.validated = 1));
+    function E(e) {
+      Y(e) ? e._store && (e._store.validated = 1) : typeof e == "object" && e !== null && e.$$typeof === P && (e._payload.status === "fulfilled" ? Y(e._payload.value) && e._payload.value._store && (e._payload.value._store.validated = 1) : e._store && (e._store.validated = 1));
     }
     function Y(e) {
-      return typeof e == "object" && e !== null && e.$$typeof === L;
+      return typeof e == "object" && e !== null && e.$$typeof === q;
     }
-    var h = me, L = Symbol.for("react.transitional.element"), K = Symbol.for("react.portal"), S = Symbol.for("react.fragment"), ee = Symbol.for("react.strict_mode"), re = Symbol.for("react.profiler"), te = Symbol.for("react.consumer"), ne = Symbol.for("react.context"), ae = Symbol.for("react.forward_ref"), oe = Symbol.for("react.suspense"), se = Symbol.for("react.suspense_list"), ie = Symbol.for("react.memo"), O = Symbol.for("react.lazy"), le = Symbol.for("react.activity"), ce = Symbol.for("react.view_transition"), ue = Symbol.for("react.client.reference"), A = h.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, $ = Object.prototype.hasOwnProperty, fe = Array.isArray, w = console.createTask ? console.createTask : function() {
+    var R = pe, q = Symbol.for("react.transitional.element"), ee = Symbol.for("react.portal"), w = Symbol.for("react.fragment"), re = Symbol.for("react.strict_mode"), te = Symbol.for("react.profiler"), ne = Symbol.for("react.consumer"), ae = Symbol.for("react.context"), oe = Symbol.for("react.forward_ref"), se = Symbol.for("react.suspense"), ie = Symbol.for("react.suspense_list"), le = Symbol.for("react.memo"), P = Symbol.for("react.lazy"), ce = Symbol.for("react.activity"), ue = Symbol.for("react.view_transition"), fe = Symbol.for("react.client.reference"), N = R.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, L = Object.prototype.hasOwnProperty, de = Array.isArray, C = console.createTask ? console.createTask : function() {
       return null;
     };
-    h = {
+    R = {
       react_stack_bottom_frame: function(e) {
         return e();
       }
     };
-    var F, D = {}, q = h.react_stack_bottom_frame.bind(
-      h,
-      u
-    )(), M = w(m(u)), W = {};
-    R.Fragment = S, R.jsx = function(e, r, n) {
-      var i = 1e4 > A.recentlyCreatedOwnerStacks++;
-      if (i) {
-        var b = Error.stackTraceLimit;
+    var F, D = {}, W = R.react_stack_bottom_frame.bind(
+      R,
+      f
+    )(), M = C(m(f)), J = {};
+    _.Fragment = w, _.jsx = function(e, t, a) {
+      var l = 1e4 > N.recentlyCreatedOwnerStacks++;
+      if (l) {
+        var h = Error.stackTraceLimit;
         Error.stackTraceLimit = 10;
-        var E = Error("react-stack-top-frame");
-        Error.stackTraceLimit = b;
-      } else E = q;
-      return T(
+        var b = Error("react-stack-top-frame");
+        Error.stackTraceLimit = h;
+      } else b = W;
+      return x(
         e,
-        r,
-        n,
+        t,
+        a,
         !1,
-        E,
-        i ? w(m(e)) : M
+        b,
+        l ? C(m(e)) : M
       );
-    }, R.jsxs = function(e, r, n) {
-      var i = 1e4 > A.recentlyCreatedOwnerStacks++;
-      if (i) {
-        var b = Error.stackTraceLimit;
+    }, _.jsxs = function(e, t, a) {
+      var l = 1e4 > N.recentlyCreatedOwnerStacks++;
+      if (l) {
+        var h = Error.stackTraceLimit;
         Error.stackTraceLimit = 10;
-        var E = Error("react-stack-top-frame");
-        Error.stackTraceLimit = b;
-      } else E = q;
-      return T(
+        var b = Error("react-stack-top-frame");
+        Error.stackTraceLimit = h;
+      } else b = W;
+      return x(
         e,
-        r,
-        n,
+        t,
+        a,
         !0,
-        E,
-        i ? w(m(e)) : M
+        b,
+        l ? C(m(e)) : M
       );
     };
-  })()), R;
+  })()), _;
 }
-var B;
-function xe() {
-  return B || (B = 1, process.env.NODE_ENV === "production" ? k.exports = ve() : k.exports = ye()), k.exports;
+var G;
+function _e() {
+  return G || (G = 1, process.env.NODE_ENV === "production" ? k.exports = Ee() : k.exports = Te()), k.exports;
 }
-var t = xe();
-const { Title: je, Paragraph: Re } = I;
-function he() {
-  const [s, p] = y(null), [d, m] = y(!1), [c, u] = y(null), f = async () => {
+var r = _e();
+const { Title: Re, Paragraph: ke } = A;
+function Se() {
+  const [o, u] = g(null), [d, m] = g(!1), [n, f] = g(null), p = async () => {
     m(!0);
     try {
-      p(await Q.instance()), u(null);
-    } catch (a) {
-      u((a == null ? void 0 : a.message) || String(a)), p(null);
+      u(await K.instance()), f(null);
+    } catch (s) {
+      f((s == null ? void 0 : s.message) || String(s)), u(null);
     } finally {
       m(!1);
     }
   };
-  return V(() => {
-    f();
-    const a = setInterval(f, 15e3);
-    return () => clearInterval(a);
-  }, []), /* @__PURE__ */ t.jsxs("div", { children: [
-    /* @__PURE__ */ t.jsxs(X, { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ t.jsx(je, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
-      /* @__PURE__ */ t.jsx(H, { icon: /* @__PURE__ */ t.jsx(G, {}), onClick: f, loading: d, children: "刷新" }),
-      /* @__PURE__ */ t.jsx(I.Text, { type: "secondary", children: "15s 自动刷新" })
+  return $(() => {
+    p();
+    const s = setInterval(p, 15e3);
+    return () => clearInterval(s);
+  }, []), /* @__PURE__ */ r.jsxs("div", { children: [
+    /* @__PURE__ */ r.jsxs(O, { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ r.jsx(Re, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
+      /* @__PURE__ */ r.jsx(H, { icon: /* @__PURE__ */ r.jsx(X, {}), onClick: p, loading: d, children: "刷新" }),
+      /* @__PURE__ */ r.jsx(A.Text, { type: "secondary", children: "15s 自动刷新" })
     ] }),
-    /* @__PURE__ */ t.jsx(Re, { type: "secondary", children: "/mq/__instance 自省：自省接口通不通 / 内嵌 broker bind 没上 / 端口属主是谁 / bind 失败原文，四件事拆开答。" }),
-    c && /* @__PURE__ */ t.jsx(Z, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: c }),
-    d && !s && /* @__PURE__ */ t.jsx(be, {}),
-    s && /* @__PURE__ */ t.jsxs(t.Fragment, { children: [
-      /* @__PURE__ */ t.jsxs(_e, { gutter: 16, style: { marginBottom: 16 }, children: [
-        /* @__PURE__ */ t.jsx(N, { span: 8, children: /* @__PURE__ */ t.jsx(g, { children: /* @__PURE__ */ t.jsx(C, { title: "nameserver 存活", value: s.nameserverAlive ? "是" : "否" }) }) }),
-        /* @__PURE__ */ t.jsx(N, { span: 8, children: /* @__PURE__ */ t.jsx(g, { children: /* @__PURE__ */ t.jsx(C, { title: "broker 存活", value: s.brokerAlive ? "是" : "否" }) }) }),
-        /* @__PURE__ */ t.jsx(N, { span: 8, children: /* @__PURE__ */ t.jsx(g, { children: /* @__PURE__ */ t.jsx(
-          C,
+    /* @__PURE__ */ r.jsx(ke, { type: "secondary", children: "/mq/__instance 自省：自省接口通不通 / 内嵌 broker bind 没上 / 端口属主是谁 / bind 失败原文，四件事拆开答。" }),
+    n && /* @__PURE__ */ r.jsx(Z, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    d && !o && /* @__PURE__ */ r.jsx(ge, {}),
+    o && /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
+      /* @__PURE__ */ r.jsxs(Q, { gutter: 16, style: { marginBottom: 16 }, children: [
+        /* @__PURE__ */ r.jsx(S, { span: 8, children: /* @__PURE__ */ r.jsx(j, { children: /* @__PURE__ */ r.jsx(z, { title: "nameserver 存活", value: o.nameserverAlive ? "是" : "否" }) }) }),
+        /* @__PURE__ */ r.jsx(S, { span: 8, children: /* @__PURE__ */ r.jsx(j, { children: /* @__PURE__ */ r.jsx(z, { title: "broker 存活", value: o.brokerAlive ? "是" : "否" }) }) }),
+        /* @__PURE__ */ r.jsx(S, { span: 8, children: /* @__PURE__ */ r.jsx(j, { children: /* @__PURE__ */ r.jsx(
+          z,
           {
             title: "bind 状态",
-            value: s.bound ? "已 bind" : "未 bind",
-            valueStyle: { color: s.bound ? "#3f8600" : "#cf1322" }
+            value: o.bound ? "已 bind" : "未 bind",
+            valueStyle: { color: o.bound ? "#3f8600" : "#cf1322" }
           }
         ) }) })
       ] }),
-      /* @__PURE__ */ t.jsx(g, { title: "实例详情", children: /* @__PURE__ */ t.jsx(z, { column: 2, bordered: !0, size: "small", children: Object.entries(s).filter(([a]) => !["bindError"].includes(a)).map(([a, o]) => /* @__PURE__ */ t.jsx(z.Item, { label: a, children: typeof o == "object" ? JSON.stringify(o) : String(o) }, a)) }) })
+      /* @__PURE__ */ r.jsx(j, { title: "实例详情", children: /* @__PURE__ */ r.jsx(U, { column: 2, bordered: !0, size: "small", children: Object.entries(o).filter(([s]) => !["bindError"].includes(s)).map(([s, i]) => /* @__PURE__ */ r.jsx(U.Item, { label: s, children: typeof i == "object" ? JSON.stringify(i) : String(i) }, s)) }) })
     ] })
   ] });
 }
-const { Title: ge, Paragraph: ke } = I;
-function Se() {
-  const [s, p] = y([]), [d, m] = y(!1), [c, u] = y(null), f = async () => {
+const { Title: Oe, Paragraph: Ae } = A;
+function we() {
+  const [o, u] = g([]), [d, m] = g(!1), [n, f] = g(null), p = async () => {
     m(!0);
     try {
-      const o = await Q.topics(), _ = Array.isArray(o) ? o : (o == null ? void 0 : o.topics) || [];
-      p(_.map((T, x) => typeof T == "string" ? { key: x, name: T } : { key: x, ...T })), u(null);
-    } catch (o) {
-      u((o == null ? void 0 : o.message) || String(o));
+      const i = await K.topics(), y = Array.isArray(i) ? i : (i == null ? void 0 : i.topics) || [];
+      u(y.map((x, E) => typeof x == "string" ? { key: E, name: x } : { key: E, ...x })), f(null);
+    } catch (i) {
+      f((i == null ? void 0 : i.message) || String(i));
     } finally {
       m(!1);
     }
   };
-  V(() => {
-    f();
+  $(() => {
+    p();
   }, []);
-  const a = Object.keys(s[0] || { name: "" }).map((o) => ({
-    title: o,
-    dataIndex: o,
-    key: o,
+  const s = Object.keys(o[0] || { name: "" }).map((i) => ({
+    title: i,
+    dataIndex: i,
+    key: i,
     ellipsis: !0,
-    render: (_) => typeof _ == "object" ? JSON.stringify(_) : String(_ ?? "—")
+    render: (y) => typeof y == "object" ? JSON.stringify(y) : String(y ?? "—")
   }));
-  return /* @__PURE__ */ t.jsxs("div", { children: [
-    /* @__PURE__ */ t.jsxs(X, { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ t.jsx(ge, { level: 4, style: { margin: 0 }, children: "Topic 清单" }),
-      /* @__PURE__ */ t.jsx(H, { icon: /* @__PURE__ */ t.jsx(G, {}), onClick: f, loading: d, children: "刷新" })
+  return /* @__PURE__ */ r.jsxs("div", { children: [
+    /* @__PURE__ */ r.jsxs(O, { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ r.jsx(Oe, { level: 4, style: { margin: 0 }, children: "Topic 清单" }),
+      /* @__PURE__ */ r.jsx(H, { icon: /* @__PURE__ */ r.jsx(X, {}), onClick: p, loading: d, children: "刷新" })
     ] }),
-    /* @__PURE__ */ t.jsx(ke, { type: "secondary", children: "集群当前所有 topic（/mq/topics，从 broker 侧拉取）。" }),
-    c && /* @__PURE__ */ t.jsx(Z, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: c }),
-    /* @__PURE__ */ t.jsx(
-      Te,
+    /* @__PURE__ */ r.jsx(Ae, { type: "secondary", children: "集群当前所有 topic（/mq/topics，从 broker 侧拉取）。" }),
+    n && /* @__PURE__ */ r.jsx(Z, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    /* @__PURE__ */ r.jsx(
+      xe,
       {
         rowKey: "key",
-        dataSource: s,
-        columns: a.length ? a : [{ title: "name", dataIndex: "name" }],
-        loading: d && !s.length,
+        dataSource: o,
+        columns: s.length ? s : [{ title: "name", dataIndex: "name" }],
+        loading: d && !o.length,
         size: "small",
         pagination: { pageSize: 20 }
       }
     )
   ] });
 }
-const Ne = [
-  { key: "/instance", icon: /* @__PURE__ */ t.jsx(pe, {}), label: "实例与端口" },
-  { key: "/topics", icon: /* @__PURE__ */ t.jsx(Ee, {}), label: "Topic 清单" }
-], Ce = [
-  { path: "instance", Component: he },
-  { path: "topics", Component: Se }
+const { Title: Pe, Paragraph: Ne } = A;
+function Ce() {
+  const o = je(), [u, d] = g(null);
+  $(() => {
+    const n = localStorage.getItem("userInfo");
+    if (n)
+      try {
+        d(JSON.parse(n));
+      } catch {
+        d({ name: n });
+      }
+  }, []);
+  const m = Ie.filter((n) => n.key !== "/z-mq/home");
+  return /* @__PURE__ */ r.jsxs("div", { children: [
+    /* @__PURE__ */ r.jsx(j, { style: { marginBottom: 16, background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)", border: "none" }, children: /* @__PURE__ */ r.jsxs(O, { direction: "vertical", size: 4, style: { color: "#fff" }, children: [
+      /* @__PURE__ */ r.jsxs(Pe, { level: 3, style: { color: "#fff", margin: 0 }, children: [
+        "欢迎",
+        u != null && u.name ? `，${u.name}` : ""
+      ] }),
+      /* @__PURE__ */ r.jsx(Ne, { style: { color: "rgba(255,255,255,0.85)", margin: 0 }, children: "z-mq 消息队列 管理台" }),
+      (u == null ? void 0 : u.role) && /* @__PURE__ */ r.jsx(ve, { style: { marginTop: 8, background: "rgba(255,255,255,0.2)", color: "#fff", border: "none" }, children: u.role })
+    ] }) }),
+    /* @__PURE__ */ r.jsx(Q, { gutter: [16, 16], children: m.map((n) => /* @__PURE__ */ r.jsx(S, { xs: 24, sm: 12, md: 12, lg: 8, children: /* @__PURE__ */ r.jsx(j, { hoverable: !0, onClick: () => o(n.key), style: { borderTop: "3px solid #7c3aed" }, children: /* @__PURE__ */ r.jsxs(O, { align: "start", size: 12, children: [
+      /* @__PURE__ */ r.jsx("div", { style: {
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        flexShrink: 0,
+        background: "rgba(124,58,237,0.08)",
+        color: "#7c3aed",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 20
+      }, children: n.icon }),
+      /* @__PURE__ */ r.jsxs("div", { style: { minWidth: 0 }, children: [
+        /* @__PURE__ */ r.jsx("div", { style: { fontSize: 15, fontWeight: 600, color: "#0f172a" }, children: n.label }),
+        /* @__PURE__ */ r.jsx("div", { style: { fontSize: 12, color: "#94a3b8", marginTop: 2 }, children: n.key })
+      ] })
+    ] }) }) }, n.key)) })
+  ] });
+}
+const Ie = [
+  { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ r.jsx(be, {}) },
+  { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ r.jsx(he, {}) },
+  { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ r.jsx(ye, {}) }
+], Fe = [
+  { path: "/z-mq/home", Component: Ce },
+  { path: "/z-mq/instance", Component: Se },
+  { path: "/z-mq/topics", Component: we }
 ];
 export {
-  he as Instance,
-  Se as Topics,
-  Le as configureMq,
-  Ne as menuItems,
-  Ce as routeTable
+  Se as Instance,
+  we as Topics,
+  Me as configureMq,
+  Ie as menuItems,
+  Fe as routeTable
 };
