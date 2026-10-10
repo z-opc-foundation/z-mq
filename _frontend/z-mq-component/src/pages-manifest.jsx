@@ -16,7 +16,7 @@ export const menuItems = [
     { key: '/z-mq/topics', label: 'Topic 清单', icon: <AppstoreOutlined /> },
 ]
 
-export const routeTable = [
+export const routes = [
     { path: '/z-mq/home', Component: HomePage },
     { path: '/z-mq/instance', Component: Instance },
     { path: '/z-mq/topics', Component: Topics },
