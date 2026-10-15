@@ -1,7 +1,7 @@
 package com.zifang.z.mq.nameserver.kvconfig;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zifang.util.json.JsonUtil;
+import com.zifang.util.json.define.TypeReference;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -14,7 +14,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import com.zifang.util.core.json.JsonMapperFactory;
 
 /**
  * KV配置管理器
@@ -23,7 +22,6 @@ import com.zifang.util.core.json.JsonMapperFactory;
 public class KVConfigManager {
 
     private static final Logger log = LogManager.getLogger(KVConfigManager.class);
-    private static final ObjectMapper objectMapper = JsonMapperFactory.getDefault();
 
     // 配置文件路径
     private final String configPath;
@@ -50,7 +48,7 @@ public class KVConfigManager {
             fis.read(data);
             String json = new String(data, StandardCharsets.UTF_8);
 
-            Map<String, Map<String, String>> loaded = objectMapper.readValue(json,
+            Map<String, Map<String, String>> loaded = JsonUtil.fromJson(json,
                     new TypeReference<Map<String, Map<String, String>>>() {
                     });
 
@@ -60,7 +58,10 @@ public class KVConfigManager {
                 }
                 log.info("KV config loaded successfully from {}", configPath);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // JsonUtil 抛的是非受检异常（JsonParseException），原来 Jackson 的
+            // JsonParseException 是 IOException 才落在 IOException 这一支上；
+            // 语义要求不变：load() 遇到坏 JSON 不能往外抛。
             log.error("Failed to load KV config from {}", configPath, e);
         }
     }
@@ -76,7 +77,7 @@ public class KVConfigManager {
                 parent.mkdirs();
             }
 
-            String json = objectMapper.writeValueAsString(configTable);
+            String json = JsonUtil.toJsonExcludingNulls(configTable);
             try (FileWriter writer = new FileWriter(file)) {
                 writer.write(json);
             }
