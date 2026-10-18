@@ -4,8 +4,8 @@ import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, mqUpstreamErrorText} from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState} from '@/common/components/ui'
-import {PageHeader} from '@/common/components/ui'
+import {EmptyState} from '@yuku123/z-frontend-common/ui'
+import {PageHeader} from '@yuku123/z-frontend-common/ui'
 
 /**
  * 集群与 Broker — 码 4 `GET_BROKER_CLUSTER_INFO`。

@@ -39,7 +39,12 @@ public class Message implements Serializable {
 
     /**
      * 消息体（字节数组）
+     * <p>
+     * Base64 文本进出：与 Jackson 时代 {@code byte[]} 的默认 JSON 表示一致，
+     * 也让 z-util JsonUtil 能读回（默认分支会把 byte[] 当数字数组、读时抛类型不匹配）。
      */
+    @com.zifang.util.json.annotation.JsonSerialize(using = com.zifang.z.mq.common.util.Base64Serializer.class)
+    @com.zifang.util.json.annotation.JsonDeserialize(using = com.zifang.z.mq.common.util.Base64Serializer.class)
     private byte[] body;
 
     /**

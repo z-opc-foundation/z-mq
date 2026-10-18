@@ -6,7 +6,7 @@ import {
 } from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {AttributionUnavailableBanner, ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState, PageHeader} from '@/common/components/ui'
+import {EmptyState, PageHeader} from '@yuku123/z-frontend-common/ui'
 
 /**
  * Broker 元数据 — 码 320/321/322/323/324 五档一次拉齐。

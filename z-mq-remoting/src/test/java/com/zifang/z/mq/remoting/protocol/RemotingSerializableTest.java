@@ -1,6 +1,6 @@
 package com.zifang.z.mq.remoting.protocol;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.zifang.util.json.define.TypeReference;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;

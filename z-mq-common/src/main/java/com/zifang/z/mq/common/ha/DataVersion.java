@@ -21,6 +21,9 @@ public class DataVersion implements java.io.Serializable {
     private static final long serialVersionUID = 1L;
 
     private volatile long timestamp = System.currentTimeMillis();
+    /** 标量进出：JsonUtil 的默认 POJO 分支动不了 final 的 AtomicLong（实测抛 IllegalArgumentException）。 */
+    @com.zifang.util.json.annotation.JsonSerialize(using = com.zifang.z.mq.common.util.AtomicNumberSerializer.class)
+    @com.zifang.util.json.annotation.JsonDeserialize(using = com.zifang.z.mq.common.util.AtomicNumberSerializer.class)
     private final AtomicLong counter = new AtomicLong(0L);
 
     public DataVersion() {

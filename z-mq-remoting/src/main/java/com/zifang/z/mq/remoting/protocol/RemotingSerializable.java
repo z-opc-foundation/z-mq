@@ -1,7 +1,7 @@
 package com.zifang.z.mq.remoting.protocol;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zifang.util.json.JsonUtil;
+import com.zifang.util.json.define.TypeReference;
 
 import java.nio.charset.StandardCharsets;
 
@@ -11,8 +11,6 @@ import java.nio.charset.StandardCharsets;
  */
 public abstract class RemotingSerializable {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-
     /**
      * 从字节数组解码对象
      */
@@ -21,7 +19,7 @@ public abstract class RemotingSerializable {
             return null;
         }
         try {
-            return objectMapper.readValue(data, clazz);
+            return JsonUtil.fromJson(new String(data, StandardCharsets.UTF_8), clazz);
         } catch (Exception e) {
             return null;
         }
@@ -36,7 +34,7 @@ public abstract class RemotingSerializable {
         }
         try {
             String json = new String(data, StandardCharsets.UTF_8);
-            return objectMapper.readValue(json, typeReference);
+            return JsonUtil.fromJson(json, typeReference);
         } catch (Exception e) {
             return null;
         }
@@ -50,7 +48,7 @@ public abstract class RemotingSerializable {
             return null;
         }
         try {
-            return objectMapper.readValue(json, clazz);
+            return JsonUtil.fromJson(json, clazz);
         } catch (Exception e) {
             return null;
         }
@@ -64,7 +62,7 @@ public abstract class RemotingSerializable {
             return null;
         }
         try {
-            return objectMapper.readValue(json, typeReference);
+            return JsonUtil.fromJson(json, typeReference);
         } catch (Exception e) {
             return null;
         }
@@ -78,7 +76,7 @@ public abstract class RemotingSerializable {
             return null;
         }
         try {
-            return objectMapper.writeValueAsBytes(obj);
+            return JsonUtil.toJson(obj).getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             return null;
         }
@@ -92,7 +90,7 @@ public abstract class RemotingSerializable {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(obj);
+            return JsonUtil.toJson(obj);
         } catch (Exception e) {
             return null;
         }
@@ -103,7 +101,7 @@ public abstract class RemotingSerializable {
      */
     public byte[] encode() {
         try {
-            return objectMapper.writeValueAsBytes(this);
+            return JsonUtil.toJson(this).getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             return null;
         }
@@ -114,7 +112,7 @@ public abstract class RemotingSerializable {
      */
     public String toJson() {
         try {
-            return objectMapper.writeValueAsString(this);
+            return JsonUtil.toJson(this);
         } catch (Exception e) {
             return null;
         }

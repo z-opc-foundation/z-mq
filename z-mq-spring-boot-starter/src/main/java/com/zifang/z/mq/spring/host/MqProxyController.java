@@ -1,7 +1,6 @@
 package com.zifang.z.mq.spring.host;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zifang.util.json.JsonUtil;
 import com.zifang.z.mq.client.MQClientInstance;
 import com.zifang.z.mq.remoting.netty.NettyClientConfig;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
@@ -135,7 +134,6 @@ public class MqProxyController {
     }
 
     private final ObjectProvider<ZMqEmbeddedServerConfig> embeddedProvider;
-    private final ObjectMapper mapper = new ObjectMapper();
     private final AtomicLong clientSeq = new AtomicLong();
 
     @Value("${z.mq.namesrv-addr:127.0.0.1:9876}")
@@ -448,6 +446,14 @@ public class MqProxyController {
         emit(resp, r);
     }
 
+    /** 取 JSON 对象的某个子节点；不是对象时返回 null（等价于 Jackson 的 {@code JsonNode.path()} 返回 MissingNode 的场景）。 */
+    private static Object asChild(Object node, String key) {
+        if (!(node instanceof Map)) {
+            return null;
+        }
+        return ((Map<?, ?>) node).get(key);
+    }
+
     private static class Resolved {
         String addr;
         String error;
@@ -464,35 +470,31 @@ public class MqProxyController {
         Resolved r = new Resolved();
         Map<String, Object> cluster = callNamesrv(RequestCode.GET_BROKER_CLUSTER_INFO, null);
         Object data = cluster.get("data");
-        if (cluster.get("error") != null || !(data instanceof JsonNode)) {
+        Object table = asChild(data, "brokerAddrTable");
+        if (cluster.get("error") != null || !(table instanceof Map)) {
             r.error = "无法从 NameServer 发现 broker：" + (cluster.get("error") != null
                     ? cluster.get("error") : "GET_BROKER_CLUSTER_INFO 没有返回可解析的 body")
                     + (cluster.get("hint") != null ? " — " + cluster.get("hint") : "");
             r.status = statusOf(cluster);
             return r;
         }
-        JsonNode table = ((JsonNode) data).path("brokerAddrTable");
         Map<String, String> byName = new LinkedHashMap<>();
-        if (table.isObject()) {
-            Iterator<String> names = table.fieldNames();
-            while (names.hasNext()) {
-                String name = names.next();
-                JsonNode bd = table.get(name);
-                JsonNode addrs = bd.path("brokerAddrs");
-                String addr = null;
-                if (addrs.isObject()) {
-                    JsonNode master = addrs.get("0");
-                    if (master == null) master = addrs.get("00");
-                    if (master != null) addr = master.asText();
-                    if (addr == null) {
-                        Iterator<String> ids = addrs.fieldNames();
-                        if (ids.hasNext()) addr = addrs.get(ids.next()).asText();
-                    }
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) table).entrySet()) {
+            String name = String.valueOf(entry.getKey());
+            Object addrs = asChild(entry.getValue(), "brokerAddrs");
+            String addr = null;
+            if (addrs instanceof Map) {
+                Map<?, ?> addrMap = (Map<?, ?>) addrs;
+                Object master = addrMap.get("0");
+                if (master == null) master = addrMap.get("00");
+                if (master != null) addr = String.valueOf(master);
+                if (addr == null && !addrMap.isEmpty()) {
+                    addr = String.valueOf(addrMap.values().iterator().next());
                 }
-                if (addr != null) {
-                    byName.put(name, addr);
-                    r.discovered.add(name + " -> " + addr);
-                }
+            }
+            if (addr != null) {
+                byName.put(name, addr);
+                r.discovered.add(name + " -> " + addr);
             }
         }
         if (explicitAddr != null && !explicitAddr.isEmpty()) {
@@ -546,7 +548,7 @@ public class MqProxyController {
         }
         String raw = new String(body, StandardCharsets.UTF_8);
         try {
-            return mapper.readTree(raw);
+            return JsonUtil.toPlainValue(JsonUtil.parse(raw));
         } catch (Exception e) {
             // 上游 handler 里有几条是手写字符串的情形；原样透出，页面自己标"非 JSON"
             Map<String, Object> w = new LinkedHashMap<>();
@@ -814,7 +816,7 @@ public class MqProxyController {
     }
 
     private void writeJson(HttpServletResponse resp, int status, Object body) throws Exception {
-        byte[] out = mapper.writeValueAsBytes(body);
+        byte[] out = JsonUtil.toJson(body).getBytes(StandardCharsets.UTF_8);
         resp.setStatus(status);
         resp.setContentType("application/json;charset=UTF-8");
         resp.setContentLength(out.length);

@@ -1,11 +1,11 @@
 package com.zifang.z.mq.remoting.protocol;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zifang.util.json.JsonUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,8 +42,6 @@ public class RemotingCommand {
 
     // 消息ID生成器
     private static final AtomicInteger REQUEST_ID = new AtomicInteger(0);
-    private static final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     // 协议头字段
     private int code;                    // 请求码或响应码
@@ -153,10 +151,27 @@ public class RemotingCommand {
      */
     public static RemotingCommand decodeHeader(byte[] headerData) {
         try {
-            RemotingCommand cmd = objectMapper.readValue(
-                    new String(headerData, StandardCharsets.UTF_8), RemotingCommand.class);
-            if (cmd == null) {
-                cmd = new RemotingCommand();
+            String json = new String(headerData, StandardCharsets.UTF_8);
+            RemotingCommand cmd = new RemotingCommand();
+            Object plain = JsonUtil.toPlainValue(JsonUtil.parse(json));
+            if (!(plain instanceof Map)) {
+                return new RemotingCommand();
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) plain;
+            cmd.code = intOf(map.get("code"));
+            cmd.version = intOf(map.get("version"));
+            cmd.opaque = intOf(map.get("opaque"));
+            cmd.flag = intOf(map.get("flag"));
+            Object remark = map.get("remark");
+            cmd.remark = remark == null ? null : String.valueOf(remark);
+            Object ext = map.get("extFields");
+            if (ext instanceof Map) {
+                Map<String, String> fields = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> e : ((Map<?, ?>) ext).entrySet()) {
+                    fields.put(String.valueOf(e.getKey()), e.getValue() == null ? null : String.valueOf(e.getValue()));
+                }
+                cmd.extFields = fields;
             }
             if (cmd.extFields == null) {
                 cmd.extFields = new HashMap<>();
@@ -282,10 +297,30 @@ public class RemotingCommand {
      */
     public byte[] encodeHeader() {
         try {
-            return objectMapper.writeValueAsBytes(this);
+            // 头部只放标量头字段：body 在帧里另有「长度 + 原始字节」一段承载，
+            // 不进头部 JSON（z-util JsonUtil 不支持 byte[] 字段的双向绑定）。
+            Map<String, Object> header = new LinkedHashMap<>();
+            header.put("code", code);
+            header.put("version", version);
+            header.put("opaque", opaque);
+            header.put("flag", flag);
+            header.put("remark", remark);
+            header.put("extFields", extFields);
+            return JsonUtil.toJson(header).getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** 头部 JSON 里的整数字段可能是 Number 也可能是字符串（跨语言实现差异），统一收敛 */
+    private static int intOf(Object v) {
+        if (v instanceof Number) {
+            return ((Number) v).intValue();
+        }
+        if (v == null) {
+            return 0;
+        }
+        return Integer.parseInt(String.valueOf(v).trim());
     }
 
     // ==================== Getters and Setters ====================

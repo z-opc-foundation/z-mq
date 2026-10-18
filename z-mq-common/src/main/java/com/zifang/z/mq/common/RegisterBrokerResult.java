@@ -1,8 +1,8 @@
 package com.zifang.z.mq.common;
 
 import java.io.Serializable;
+import java.util.Collection;
 import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Broker 注册结果（对标 RocketMQ RegisterBrokerResult）.
@@ -15,7 +15,12 @@ public class RegisterBrokerResult implements Serializable {
 
     private String haServerAddr;
     private String masterAddr;
-    private Set<String> changedTopicSet = new HashSet<>();
+    /**
+     * 声明成 Collection 而不是 Set：z-util JsonUtil 的容器分支只认 List / Collection / Map，
+     * Set 字段读回时会去找 Set 的构造器并抛异常（实测）。写入方给的仍是 HashSet，
+     * 调用方按 Collection 用即可，线上 JSON 形状不变（仍是 JSON 数组）。
+     */
+    private Collection<String> changedTopicSet = new HashSet<>();
 
     public String getHaServerAddr() {
         return haServerAddr;
@@ -33,11 +38,11 @@ public class RegisterBrokerResult implements Serializable {
         this.masterAddr = masterAddr;
     }
 
-    public Set<String> getChangedTopicSet() {
+    public Collection<String> getChangedTopicSet() {
         return changedTopicSet;
     }
 
-    public void setChangedTopicSet(Set<String> changedTopicSet) {
+    public void setChangedTopicSet(Collection<String> changedTopicSet) {
         this.changedTopicSet = changedTopicSet;
     }
 

@@ -9,7 +9,7 @@ import {
     UnattributedDataBanner,
     ZombieChildBanner,
 } from './AttributionBanner'
-import {PageHeader} from '@/common/components/ui'
+import {PageHeader} from '@yuku123/z-frontend-common/ui'
 
 /** 上游真实响应：随便挑一条只读码打一发，用来证明"代理层不只是在报自省，它真能发出去" */
 function fmtTs(ms) {
