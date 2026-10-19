@@ -152,6 +152,11 @@ public class BrokerController {
      */
     public boolean initialize() {
         try {
+            // 上报地址里的端口取自真正要 bind 的那个配置。只在 BrokerStartup 里回填是不够的：
+            // 测试与嵌入式用法都直接 new BrokerController，listenPort 会停在 0，
+            // 注册给 NameServer 的就成了 "localhost:0"，客户端一律连不上。
+            this.brokerConfig.setListenPort(this.nettyServerConfig.getListenPort());
+
             // 加载CommitLog
             this.commitLog = new CommitLog(this.messageStoreConfig);
             if (!this.commitLog.load()) {
@@ -253,6 +258,10 @@ public class BrokerController {
                 RequestCode.UPDATE_AND_CREATE_TOPIC, this.adminBrokerProcessor, this.adminBrokerExecutor);
         this.remotingServer.registerProcessor(
                 RequestCode.GET_ALL_TOPIC_LIST, this.adminBrokerProcessor, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.DELETE_TOPIC, this.adminBrokerProcessor, this.adminBrokerExecutor);
+        this.remotingServer.registerProcessor(
+                RequestCode.VIEW_MESSAGE_BY_KEY, this.adminBrokerProcessor, this.adminBrokerExecutor);
 
         // Broker OutAPI (Broker 互查接口, SlaveSynchronize 通过它拉取元数据)
         this.brokerOutAPI = new com.zifang.z.mq.broker.outapi.BrokerOutAPI(this);
@@ -440,7 +449,7 @@ public class BrokerController {
                 RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER);
                 request.addExtField("clusterName", this.brokerConfig.getBrokerClusterName());
                 request.addExtField("brokerName", this.brokerConfig.getBrokerName());
-                request.addExtField("brokerAddr", "localhost:" + this.nettyServerConfig.getListenPort());
+                request.addExtField("brokerAddr", this.brokerConfig.getAdvertisedAddr());
                 request.addExtField("brokerId", String.valueOf(com.zifang.z.mq.common.BrokerData.MASTER_ID));
                 request.addExtField("haServerAddr", "");
 

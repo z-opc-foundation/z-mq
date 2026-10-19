@@ -45,3 +45,11 @@ coverage/
 **/__pycache__/
 *.pyc
 _frontend/**/node_modules/
+z-mq-admin/node_modules/
+z-mq-admin/dist/
+# vue-tsc -b / tsc -b 往源码树里吐的编译产物（vite.config.js 就是这么来的）
+*.tsbuildinfo
+z-mq-admin/vite.config.js
+z-mq-admin/vite.config.d.ts
+# 控制台镜像的构建输入：build-admin-dist.sh 的产物，随镜像走不进 git
+deploy/admin-dist/

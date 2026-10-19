@@ -64,6 +64,7 @@
         <module>z-mq-client</module>
         <module>z-mq-spring-boot-starter</module>
         <module>z-mq-tools</module>
+        <module>z-mq-broker-admin</module>
     </modules>
 
     <properties>

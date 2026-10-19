@@ -67,6 +67,10 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
                 return handleCreateTopic(request);
             case RequestCode.GET_ALL_TOPIC_LIST:
                 return handleGetAllTopics(request);
+            case RequestCode.DELETE_TOPIC:
+                return handleDeleteTopic(request);
+            case RequestCode.VIEW_MESSAGE_BY_KEY:
+                return handleViewMessage(request);
             default:
                 RemotingCommand response = RemotingCommand.createResponseCommand(
                         RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED);
@@ -99,6 +103,72 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
         CreateTopicResult body = new CreateTopicResult();
         body.setTopic(topic);
         body.setQueueDataList(toQueueData(config));
+        response.setBody(com.zifang.z.mq.common.util.JsonCodec.encode(body));
+        return response;
+    }
+
+    private RemotingCommand handleDeleteTopic(RemotingCommand request) {
+        RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SUCCESS);
+        response.setOpaque(request.getOpaque());
+
+        String topic = request.getExtField("topic");
+        if (topic == null || topic.isEmpty()) {
+            response.setCode(RemotingSysResponseCode.SYSTEM_ERROR);
+            response.setRemark("topic is empty");
+            return response;
+        }
+
+        // 只摘配置表，不动 CommitLog：存储层没有按 topic 物理清除的能力
+        TopicConfig removed = topicConfigManager.deleteTopicConfig(topic);
+        if (removed == null) {
+            response.setCode(RemotingSysResponseCode.SYSTEM_ERROR);
+            response.setRemark("topic not found: " + topic);
+            return response;
+        }
+        topicConfigDataVersion.assignNewVersion();
+        log.info("Topic deleted: {}", topic);
+        return response;
+    }
+
+    private RemotingCommand handleViewMessage(RemotingCommand request) {
+        RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SUCCESS);
+        response.setOpaque(request.getOpaque());
+
+        String topic = request.getExtField("topic");
+        String queueIdStr = request.getExtField("queueId");
+        String offsetStr = request.getExtField("queueOffset");
+        String maxNumStr = request.getExtField("maxNum");
+        if (topic == null || topic.isEmpty() || queueIdStr == null || offsetStr == null) {
+            response.setCode(RemotingSysResponseCode.SYSTEM_ERROR);
+            response.setRemark("topic/queueId/queueOffset required");
+            return response;
+        }
+
+        int queueId;
+        long queueOffset;
+        int maxNum;
+        try {
+            queueId = Integer.parseInt(queueIdStr);
+            queueOffset = Long.parseLong(offsetStr);
+            maxNum = maxNumStr == null || maxNumStr.isEmpty() ? 32 : Integer.parseInt(maxNumStr);
+        } catch (NumberFormatException e) {
+            response.setCode(RemotingSysResponseCode.SYSTEM_ERROR);
+            response.setRemark("queueId/queueOffset/maxNum must be numeric");
+            return response;
+        }
+
+        com.zifang.z.mq.store.log.CommitLog commitLog = brokerController.getCommitLog();
+        if (commitLog == null) {
+            response.setCode(RemotingSysResponseCode.SYSTEM_ERROR);
+            response.setRemark("commit log not available");
+            return response;
+        }
+
+        List<com.zifang.z.mq.common.message.MessageExt> messages =
+                commitLog.pullMessage(topic, queueId, queueOffset, maxNum);
+
+        MessageViewResult body = new MessageViewResult();
+        body.setMessages(messages);
         response.setBody(com.zifang.z.mq.common.util.JsonCodec.encode(body));
         return response;
     }
@@ -181,5 +251,15 @@ public class AdminBrokerProcessor implements NettyRemotingAbstract.NettyRequestP
 
         public List<String> getTopics() { return topics; }
         public void setTopics(List<String> topics) { this.topics = topics; }
+    }
+
+    public static class MessageViewResult implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private List<com.zifang.z.mq.common.message.MessageExt> messages = new ArrayList<>();
+
+        public List<com.zifang.z.mq.common.message.MessageExt> getMessages() { return messages; }
+        public void setMessages(List<com.zifang.z.mq.common.message.MessageExt> messages) {
+            this.messages = messages;
+        }
     }
 }

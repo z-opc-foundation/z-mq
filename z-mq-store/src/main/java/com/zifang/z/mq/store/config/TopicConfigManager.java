@@ -102,6 +102,30 @@ public class TopicConfigManager {
     }
 
     /**
+     * 删一条 Topic 配置，并落盘。
+     * <p>
+     * 对标 RocketMQ deleteTopic 的语义：只摘配置表与路由，不去动 CommitLog 里已落盘的消息
+     * —— 存储层没有按 topic 物理清除的能力，硬删会让 offset 与索引同时失真。
+     *
+     * @return 之前存在的那条配置；本来就没有则返回 null（调用方据此区分「删掉了」与「本来就没有」）
+     */
+    public TopicConfig deleteTopicConfig(String topic) {
+        if (topic == null || topic.isEmpty()) {
+            return null;
+        }
+        lock.writeLock().lock();
+        try {
+            TopicConfig removed = topicConfigTable.remove(topic);
+            if (removed != null) {
+                persist();
+            }
+            return removed;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /**
      * 用 incoming <b>完全替换</b>本地表（包括删掉 incoming 里没有的条目），并落盘.
      * <p>
      * 主从同步走的就是这条路：覆盖之后 slave 本地的盘上看到的也必须是这一份，

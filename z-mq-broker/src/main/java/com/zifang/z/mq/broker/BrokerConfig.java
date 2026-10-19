@@ -16,6 +16,23 @@ public class BrokerConfig {
     private String brokerClusterName = System.getProperty("brokerClusterName", "DEFAULT_CLUSTER");
 
     /**
+     * 向 NameServer 注册时**对外公布**的 Broker 地址主机名/IP（对标 RocketMQ 的 brokerIP1）。
+     * <p>
+     * 这不是"本进程 bind 在哪"，而是"客户端该连哪"：注册上报后 NameServer 路由表里存的就是
+     * 它。此前上报值写死 {@code localhost:端口}，本机客户端看不出问题，但任何远程客户端按路由表
+     * 去连的都是**它自己机器上的** 10911 —— 单机跑得通、集群里必然连不上。
+     * <p>
+     * 默认值仍取 localhost，以保持本地开发的既有行为；容器/k8s 部署必须显式覆盖。
+     */
+    private String brokerIp1 = System.getProperty("brokerIp1", "localhost");
+
+    /**
+     * 绑定的监听端口。与 {@link #brokerIp1} 合成上报地址，二者独立：监听在容器内网
+     * 10911、公布给集群外客户端的可能是宿主机 IP + NodePort，因此公布地址不能只靠 IP 推断端口。
+     */
+    private int listenPort;
+
+    /**
      * Broker ID: 0 = Master (默认), 1+ = Slave.
      * <p>
      * Slave 启动时会从 {@link #brokerMasterAddr} 拉取元数据 + 同步 CommitLog.
@@ -58,6 +75,27 @@ public class BrokerConfig {
 
     public void setBrokerClusterName(String brokerClusterName) {
         this.brokerClusterName = brokerClusterName;
+    }
+
+    public String getBrokerIp1() {
+        return brokerIp1;
+    }
+
+    public void setBrokerIp1(String brokerIp1) {
+        this.brokerIp1 = brokerIp1;
+    }
+
+    public int getListenPort() {
+        return listenPort;
+    }
+
+    public void setListenPort(int listenPort) {
+        this.listenPort = listenPort;
+    }
+
+    /** 向 NameServer 上报的客户端可达地址（{@code host:port}）。 */
+    public String getAdvertisedAddr() {
+        return brokerIp1 + ":" + listenPort;
     }
 
     /**

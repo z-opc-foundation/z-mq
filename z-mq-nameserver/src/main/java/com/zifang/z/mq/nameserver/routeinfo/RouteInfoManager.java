@@ -270,6 +270,40 @@ public class RouteInfoManager {
     }
 
     /**
+     * 清掉某个 Broker 名下的全部 Topic 队列项，注册前调用。
+     * <p>
+     * 注册只增不减：broker 上把 topic 删掉后再上报，{@link #registerTopic} 一条都不会进来，
+     * 旧的那条却一直留在表里。于是 Topic 删了、路由表里还在，控制台列出来的是一条
+     * 没有队列数的幽灵 topic，客户端也会一直往一个已经不存在的 topic 拉消息。
+     * <p>
+     * Broker 的注册报文是**全量快照**，所以先整体清掉再按新快照重填就是对的；
+     * 只动属于该 broker 的 QueueData，别家 broker 服务同一个 topic 时不受影响。
+     */
+    public void unregisterTopicsOfBroker(final String brokerName) {
+        if (brokerName == null) {
+            return;
+        }
+        this.lock.writeLock().lock();
+        try {
+            Iterator<Map.Entry<String, List<QueueData>>> it = this.topicQueueTable.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<String, List<QueueData>> entry = it.next();
+                List<QueueData> queues = entry.getValue();
+                if (queues == null) {
+                    it.remove();
+                    continue;
+                }
+                queues.removeIf(q -> brokerName.equals(q.getBrokerName()));
+                if (queues.isEmpty()) {
+                    it.remove();
+                }
+            }
+        } finally {
+            this.lock.writeLock().unlock();
+        }
+    }
+
+    /**
      * 获取 Topic 队列表 (Topic -> List&lt;QueueData&gt;) 的快照。
      */
     public Map<String, List<QueueData>> getTopicQueueTable() {

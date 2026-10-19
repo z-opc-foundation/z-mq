@@ -103,7 +103,9 @@ public class DefaultRequestProcessor implements NettyRemotingAbstract.NettyReque
                 clusterName, brokerAddr, brokerName, brokerId, haServerAddr,
                 ctx == null ? null : ctx.channel());
 
-        // 把 TopicConfig 注册进 topicQueueTable
+        // 把 TopicConfig 注册进 topicQueueTable。注册报文是全量快照，所以先清掉这个 broker
+        // 名下的旧条目 —— 否则它删掉的 topic 会永远留在路由表里（控制台里是一条 0 队列的幽灵）
+        nameServerController.getRouteInfoManager().unregisterTopicsOfBroker(brokerName);
         if (topicConfigList != null) {
             for (TopicConfig tc : topicConfigList) {
                 nameServerController.getRouteInfoManager().registerTopic(brokerName, tc);

@@ -10,8 +10,10 @@ import org.apache.logging.log4j.Logger;
  * <p>
  * 启动方式：
  * <pre>
- *   java -cp z-mq-broker-*.jar com.zifang.z.mq.broker.BrokerStartup [brokerPort] [namesrvAddr] [storePath]
+ *   java -jar z-mq-broker-*-exec.jar [brokerPort] [namesrvAddr] [storePath] [brokerIp1]
  * </pre>
+ * {@code brokerIp1} 是**对外公布**的地址主机名（对标 RocketMQ 的 -c brokerIP1）：
+ * 客户端是按 NameServer 路由表里这个地址来连 Broker 的，容器部署必须给可路由的值。
  */
 public class BrokerStartup {
 
@@ -33,11 +35,15 @@ public class BrokerStartup {
         if (args.length >= 3) {
             messageStoreConfig.setStorePathRootDir(args[2]);
         }
+        if (args.length >= 4 && !args[3].isEmpty()) {
+            brokerConfig.setBrokerIp1(args[3]);
+        }
 
-        log.info("Starting Broker, brokerPort={}, namesrvAddr={}, storePath={}",
+        log.info("Starting Broker, brokerPort={}, namesrvAddr={}, storePath={}, advertisedAddr={}",
                 nettyServerConfig.getListenPort(),
                 brokerConfig.getNamesrvAddr(),
-                messageStoreConfig.getStorePathRootDir());
+                messageStoreConfig.getStorePathRootDir(),
+                brokerConfig.getAdvertisedAddr());
 
         BrokerController controller = new BrokerController(brokerConfig, messageStoreConfig, nettyServerConfig);
         boolean ok = controller.initialize();

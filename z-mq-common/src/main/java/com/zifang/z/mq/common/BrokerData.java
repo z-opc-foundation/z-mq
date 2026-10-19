@@ -2,6 +2,7 @@ package com.zifang.z.mq.common;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Broker 数据（对标 RocketMQ BrokerData）.
@@ -17,8 +18,14 @@ public class BrokerData implements Serializable {
 
     private String cluster;
     private String brokerName;
-    /** key: brokerId (0=master, >0=slave), value: broker addr (host:port). */
-    private HashMap<Long, String> brokerAddrs = new HashMap<>();
+    /**
+     * key: brokerId (0=master, 大于 0 为 slave), value: broker addr (host:port).
+     * <p>
+     * 声明类型必须是 {@code Map} 而不是 {@code HashMap}：z-util 的 fromJson 只对接口型
+     * 声明的 map 字段做绑定，声明成具体实现类时会把整个字段丢成空 map 且**不抛异常**，
+     * 于是 brokerAddrs 恒为空、selectBrokerAddr() 恒为 null，路由表拿到了也用不了。
+     */
+    private Map<Long, String> brokerAddrs = new HashMap<>();
 
     public BrokerData() {
     }
@@ -57,11 +64,11 @@ public class BrokerData implements Serializable {
         this.brokerName = brokerName;
     }
 
-    public HashMap<Long, String> getBrokerAddrs() {
+    public Map<Long, String> getBrokerAddrs() {
         return brokerAddrs;
     }
 
-    public void setBrokerAddrs(HashMap<Long, String> brokerAddrs) {
+    public void setBrokerAddrs(Map<Long, String> brokerAddrs) {
         this.brokerAddrs = brokerAddrs;
     }
 
