@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: z-mq-broker
+  namespace: z-mq
+  labels:
+    app: z-mq-broker
+spec:
+  serviceName: z-mq-broker
+  replicas: 1
+  selector:
+    matchLabels:
+      app: z-mq-broker
+  template:
+    metadata:
+      labels:
+        app: z-mq-broker
+    spec:
+      containers:
+        - name: broker
+          image: z-mq-broker:local
+          imagePullPolicy: Never
+          ports:
+            - name: rpc
+              containerPort: 10911
+          env:
+            - name: ZMQ_BROKER_PORT
+              value: "10911"
+            # 必须用 Service 名，不能是 127.0.0.1：broker 拿到的是自己容器内的回环地址
+            - name: ZMQ_NAMESRV_ADDR
+              value: z-mq-nameserver:9876
+            - name: ZMQ_STORE_PATH
+              value: /data/store
+            # 公布地址 = 集群内 Service DNS。集群外客户端要连，改成 NodePort 的
+            # <节点IP>:31911 —— 只改这个值，不改 broker 实际监听端口。
+            - name: ZMQ_BROKER_IP1
+              value: z-mq-broker.z-mq.svc.cluster.local
+          volumeMounts:
+            - name: store
+              mountPath: /data/store
+          readinessProbe:
+            tcpSocket:
+              port: 10911
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 10911
+            initialDelaySeconds: 60
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: store
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

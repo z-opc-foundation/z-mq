@@ -1,0 +1,56 @@
+# z-mq 本地 compose（lead 005 §1.3 Mode 1）
+#
+# ⚠ 协议私有：Broker/NameServer 之间走的是 z-mq-remoting 自研的 Netty 二进制协议，
+#   不是 Kafka/RocketMQ 线格式。Kafka 客户端、rocketmq 客户端都无法直连，
+#   客户端必须换成 z-mq-client。详见 README「与 RocketMQ 的差异」。
+#
+# 用法（构建上下文必须是本仓根目录，不是 deploy/）：
+#   docker compose -f deploy/docker-compose.yml up -d --build
+version: "3.8"
+
+services:
+  z-mq-nameserver:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nameserver
+    image: z-mq-nameserver:local
+    container_name: z-mq-nameserver
+    environment:
+      ZMQ_NAMESRV_PORT: "9876"
+      ZMQ_NAMESRV_KV_CONFIG: "/data/namesrv/kvConfig.json"
+    volumes:
+      - zmq-namesrv-data:/data/namesrv
+    ports:
+      - "9876:9876"
+    networks:
+      - zmq
+
+  z-mq-broker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.broker
+    image: z-mq-broker:local
+    container_name: z-mq-broker
+    depends_on:
+      - z-mq-nameserver
+    environment:
+      ZMQ_BROKER_PORT: "10911"
+      # 服务名解析：compose 内网里走服务名，不要写 127.0.0.1（那是 broker 容器自己）
+      ZMQ_NAMESRV_ADDR: "z-mq-nameserver:9876"
+      ZMQ_STORE_PATH: "/data/store"
+      # 客户端在 compose 网络外时按这个名字回连 broker；纯本机联调用宿主机名/IP
+      ZMQ_BROKER_IP1: "${ZMQ_BROKER_IP1:-z-mq-broker}"
+    volumes:
+      - zmq-broker-store:/data/store
+    ports:
+      - "10911:10911"
+    networks:
+      - zmq
+
+volumes:
+  zmq-namesrv-data:
+  zmq-broker-store:
+
+networks:
+  zmq:
+    name: zmq

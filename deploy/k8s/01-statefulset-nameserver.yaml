@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: z-mq-nameserver
+  namespace: z-mq
+  labels:
+    app: z-mq-nameserver
+spec:
+  serviceName: z-mq-nameserver
+  replicas: 1
+  selector:
+    matchLabels:
+      app: z-mq-nameserver
+  template:
+    metadata:
+      labels:
+        app: z-mq-nameserver
+    spec:
+      containers:
+        - name: nameserver
+          image: z-mq-nameserver:local
+          imagePullPolicy: Never
+          ports:
+            - name: rpc
+              containerPort: 9876
+          env:
+            - name: ZMQ_NAMESRV_PORT
+              value: "9876"
+            - name: ZMQ_NAMESRV_KV_CONFIG
+              value: /data/namesrv/kvConfig.json
+          volumeMounts:
+            - name: data
+              mountPath: /data/namesrv
+          readinessProbe:
+            tcpSocket:
+              port: 9876
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9876
+            initialDelaySeconds: 30
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

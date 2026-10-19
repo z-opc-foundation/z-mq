@@ -1,0 +1,52 @@
+# Z-MQ 控制台（z-mq-broker-admin）
+#
+# 单副本无状态：只读/运维类操作（建删 topic、查消息），不做主从切换，
+# 起两份反而会让两个人同时点删 topic。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: z-mq-broker-admin
+  namespace: z-mq
+  labels:
+    app: z-mq-broker-admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: z-mq-broker-admin
+  template:
+    metadata:
+      labels:
+        app: z-mq-broker-admin
+    spec:
+      containers:
+        - name: z-mq-broker-admin
+          image: z-mq-broker-admin:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9090
+          env:
+            - name: ZMQ_ADMIN_NAMESRV_ADDR
+              # 控制台自己解析这个地址拿路由表；headless svc 在同一 ns 里可用短名
+              value: "z-mq-nameserver.z-mq.svc.cluster.local:9876"
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx768m"
+          readinessProbe:
+            httpGet:
+              path: /topics
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /topics
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi

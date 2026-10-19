@@ -1,0 +1,63 @@
+# z-mq Broker Admin 镜像（lead 005 §1.3 部署层）
+#
+# 控制台：REST + 前端打进同一个 jar，容器只跑一个进程。
+#
+# 构建上下文 = **本仓根目录**：
+#   docker build -f deploy/Dockerfile.admin -t z-mq-broker-admin:local .
+# 前端 dist 在**仓外**构建好再 COPY 进来（见 deploy/bin/build-admin-dist.sh），
+# 不在镜像里跑 npm —— 构建机装 Node 会把镜像重拖一大截，且 npm registry 在部分网络里不可达。
+ARG BUILDER_BASE=maven:3.9.9-eclipse-temurin-8
+ARG RUNTIME_BASE=eclipse-temurin:8-jre
+
+FROM ${BUILDER_BASE} AS builder
+
+WORKDIR /build
+
+# 根 pom 的 <modules> 列了全部 9 个模块，Maven 在解析 reactor 阶段就要求
+# 它们**都在**上下文里，缺一个直接 ProjectBuildingException，连 -pl 都进不去。
+COPY ./pom.xml ./pom.xml
+COPY ./z-mq-common ./z-mq-common
+COPY ./z-mq-remoting ./z-mq-remoting
+COPY ./z-mq-store ./z-mq-store
+COPY ./z-mq-nameserver ./z-mq-nameserver
+COPY ./z-mq-broker ./z-mq-broker
+COPY ./z-mq-client ./z-mq-client
+COPY ./z-mq-spring-boot-starter ./z-mq-spring-boot-starter
+COPY ./z-mq-tools ./z-mq-tools
+COPY ./z-mq-broker-admin ./z-mq-broker-admin
+
+RUN mvn -f pom.xml -pl z-mq-broker-admin -am clean package \
+        -DskipTests \
+        -Dmaven.javadoc.skip=true \
+        -q
+
+FROM ${RUNTIME_BASE}
+
+LABEL maintainer="zifang"
+LABEL description="z-mq Broker Admin Console"
+
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+RUN useradd --system --uid 10003 zmq
+USER 10003
+
+WORKDIR /app
+
+COPY --from=builder /build/z-mq-broker-admin/target/z-mq-broker-admin-*.jar /app/admin.jar
+# 前端构建产物：仓外构建后放到 deploy/admin-dist/，缺失时构建直接失败，
+# 否则镜像里会是一个只有 REST、打不开页面的空壳控制台
+COPY ./deploy/admin-dist/ /app/static/
+
+ENV JAVA_OPTS="-Xms256m -Xmx768m"
+# NameServer 地址，多个用 ; 分隔。控制台靠它拿路由表再直连 broker
+ENV ZMQ_ADMIN_NAMESRV_ADDR="127.0.0.1:9876"
+ENV SERVER_PORT="9090"
+
+EXPOSE 9090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/${SERVER_PORT}'
+
+# 必须走 sh -c：JAVA_OPTS 是 shell 变量，exec 形式（数组）下不会被展开
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/admin.jar"]
