@@ -333,7 +333,7 @@ npm run build        # vue-tsc -b && vite build → dist/
 
 如实说明：它是 7 个页面的 MVP，`src/api/index.ts` 自己标注"当前 MVP 提供 mock 数据"，
 代理指向的 `z-mq-broker-admin` REST 服务**在这个仓里不存在** —— 后端起来之前，控制台看到的数字都是假的。
-详细设计见 [`_doc/001_arch/z-mq-admin.md`](_doc/001_arch/z-mq-admin.md)。
+详细设计见 [`_doc/001_arch/06-admin.md`](_doc/001_arch/06-admin.md)。
 
 ---
 
@@ -404,25 +404,26 @@ _Maintained by the z-opc-foundation organization._
 
 ## 文档目录
 
+- [`_doc/006_release/`](_doc/006_release/) — 发布与中央仓文档（Sonatype 限额申请）
 本项目文档统一收口在 `_doc/` 下。⚠️ `001_arch/` 里有**两代并存**的文档，两代冲突时**以代码为准**，
 下表已按现读代码标注哪一份更接近今天：
 
 - [`_doc/001_arch/`](_doc/001_arch/) — 架构与历史文档：
   - [`00-overview.md`](_doc/001_arch/00-overview.md) — 项目定位与上下游关系（最粗略的一页）
   - [`01-module-structure.md`](_doc/001_arch/01-module-structure.md) — 模块结构（7 模块时代，模块名还写作 `z-mq-namesrv`）
-  - [`01-module-structure-2.md`](_doc/001_arch/01-module-structure-2.md) — **另一代**的长版架构文档（1600+ 行，
+  - [`03-architecture-design.md`](_doc/001_arch/03-architecture-design.md) — **另一代**的长版架构文档（1600+ 行，
     还列了根本不存在的 `z-mq-controller` / `z-mq-example`，并宣称支持 JMS/MQTT）。
     **两份都是 2026-09-16 历史塌缩提交里的规划稿，都不是现状**；现在唯一接近真相的结构说明是本 README 的
     「项目结构」+ 上面的能力表
   - [`02-feature.md`](_doc/001_arch/02-feature.md) — P0 功能完成状态清单
-  - [`P0完成报告.md`](_doc/001_arch/P0完成报告.md) — P0 结项报告（"完成状态 100%"是当时的口径，
+  - [`05-p0-completion-report.md`](_doc/001_arch/05-p0-completion-report.md) — P0 结项报告（"完成状态 100%"是当时的口径，
     与本文「只有类型、没有通路」那一栏的实测结论冲突时以实测为准）
-  - [`07-roadmap.md`](_doc/001_arch/07-roadmap.md) / [`07-roadmap-2.md`](_doc/001_arch/07-roadmap-2.md) —
+  - [`07-roadmap.md`](_doc/001_arch/07-roadmap.md) / [`04-roadmap-iteration.md`](_doc/001_arch/04-roadmap-iteration.md) —
     同一份迭代排期的两个世代，差异只有 `-2` 多了一列空的"负责人"；两者状态格都还停在 ⬜，**不反映已完成事实**
-  - [`技术方案.md`](_doc/001_arch/技术方案.md) — 规划期技术方案（按 9 模块设想写，含未落地部分）
-  - [`ZMQ_VS_ROCKETMQ.md`](_doc/001_arch/ZMQ_VS_ROCKETMQ.md) — **对 RocketMQ 的能力差距分析，与代码最一致的一份**
+  - [`08-design.md`](_doc/001_arch/08-design.md) — 规划期技术方案（按 9 模块设想写，含未落地部分）
+  - [`09-selection.md`](_doc/001_arch/09-selection.md) — **对 RocketMQ 的能力差距分析，与代码最一致的一份**
     （它已点明"缺 ConsumeQueue / IndexFile"）；只看 `001_arch` 就看这份
-  - [`z-mq-admin.md`](_doc/001_arch/z-mq-admin.md) — 控制台设计稿（Vue 3 + Element Plus，8081 → 9090 代理拓扑）
+  - [`06-admin.md`](_doc/001_arch/06-admin.md) — 控制台设计稿（Vue 3 + Element Plus，8081 → 9090 代理拓扑）
   - 空目录如实记录：`_doc/002_deploy/` 与
     `_doc/004_skill/` **目前都是空目录**（没有部署文档、没有 SQL、没有 skill）
 

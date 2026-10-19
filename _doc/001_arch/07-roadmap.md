@@ -591,4 +591,4 @@
 
 **文档版本**: 1.0
 **最后更新**: 2026-03-30
-**关联文档**: [技术架构.md](./技术架构.md), [技术方案.md](./技术方案.md)
+**关联文档**: [01-module-structure.md](./01-module-structure.md), [08-design.md](./08-design.md)
