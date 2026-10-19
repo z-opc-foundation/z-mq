@@ -27,7 +27,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | **Maven 坐标** | `io.github.yuku123:z-mq:${revision}`，`packaging=pom` |
 | **当前版本** | `<revision>` = **`1.3.1`**（CI-friendly versions + 常开 flatten-maven-plugin 1.5.0） |
 | **父项目** | `io.github.yuku123:z-boot-parent:1.1.0`（`<relativePath/>` 留空，parent 在 repo1 不在磁盘；repo1 实测 200） |
-| **版本权威链** | `z-boot-parent` → 第三方地板 `z-boot-dependencies` + 兄弟仓权威表 `z-boot-fleet`；`z-boot-fleet` 里 `<z-mq.version>` 现读 **`1.3.1`**（`z-boot/z-boot-fleet/pom.xml`、`gen_fleet_bom.py` 两处一致）⇒ 本仓 revision 与 fleet 同格 |
+| **版本权威链** | `z-boot-parent` → 第三方地板 + 兄弟仓权威表（两段内容均已并进 parent 自身，`z-boot-dependencies` / `z-boot-fleet` 两个文件夹随 2026-10-08 火车制拓扑退役）；`z-boot-parent` 的 `<z-mq.version>` 现读 **`1.3.1`**（`z-boot/z-boot-parent/pom.xml` 一处）⇒ 本仓 revision 与 parent 槽位同格 |
 | **Maven Central** | **已发布**：`z-mq` / `z-mq-common` / `z-mq-remoting` / `z-mq-store` / `z-mq-nameserver` / `z-mq-broker` / `z-mq-client` / `z-mq-spring-boot-starter` / `z-mq-tools` 九个坐标的 `1.3.1` 逐个 ranged GET 实测 **200**（`1.3.0` 同样 200）；组路径 `io/github/yuku123` |
 | **默认端口** | NameServer **9876**、Broker **10911**（写死在两个 `Startup` 的 `args.length == 0` 分支）；`NettyServerConfig.listenPort` 字段默认 **8888**，但两个 `Startup` 都会覆盖它 ⇒ 8888 不是任何进程的实测端口；控制台 Vite dev **8081** |
 | **运行口径** | Java 8（根 `<java.version>8</java.version>`）· Spring Boot **仅** starter 模块用 2.7.18 · 日志 Log4j2 · 序列化 Jackson JSON |
