@@ -1,0 +1,24 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: z-mq-broker-admin
+  web:
+    resources:
+      # 控制台 dist 由镜像以 /app/static/ 挂进来（jar 内没有前端资源），
+      # 所以除了默认的 classpath 还要给出文件系统位置，否则页面 404 只剩 REST 能通
+      static-locations: classpath:/static/,file:/app/static/
+
+zmq:
+  admin:
+    namesrv-addr: ${ZMQ_ADMIN_NAMESRV_ADDR:127.0.0.1:9876}
+    # 写操作连的 broker。留空 = 用路由表里的第一个；控制台跑在集群外、
+    # 解析不了路由表里那个集群内 DNS 时才需要显式指定
+    broker-addr: ${ZMQ_ADMIN_BROKER_ADDR:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

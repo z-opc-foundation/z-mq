@@ -15,7 +15,7 @@
           <el-input-number v-model="queryForm.offset" :min="0" />
         </el-form-item>
         <el-form-item label="最多条数">
-          <el-input-number v-model="queryForm.maxNum" :min="1" :max="64" />
+          <el-input-number v-model="queryForm.count" :min="1" :max="64" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="loading" @click="onQuery">查询</el-button>
@@ -68,7 +68,7 @@ const queryForm = ref({
   topic: '',
   queueId: 0,
   offset: 0,
-  maxNum: 16
+  count: 16
 })
 const messages = ref<api.MessageItem[]>([])
 const loading = ref(false)
