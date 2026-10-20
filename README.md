@@ -9,7 +9,7 @@
 z-opc 基座需要一条不依赖外部 Kafka/RocketMQ 集群的异步消息通路：进程间事件通知、任务解耦、
 延迟投递与死信兜底。z-mq 把 NameServer（路由注册中心）、Broker（存储 + 投递）、Client（生产/消费）、
 Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接 RPC）五层全部自养在一个仓里，
-对外发布 8 个 jar + 1 个聚合 POM 到 Maven Central，另带一个 Vue 3 控制台工程。
+对外发布 9 个 jar + 1 个聚合 POM 到 Maven Central，另带一个 Vue 3 控制台工程。
 
 ⚠️ 读这份 README 的正确姿势：**下面「已接线」那一栏才是你现在能用的能力**。
 这个仓里有一批"类已经写好、协议码已经定义、但没有任何调用方"的形状（延迟消息、广播消费、
@@ -28,10 +28,10 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | **当前版本** | `<revision>` = **`1.3.1`**（CI-friendly versions + 常开 flatten-maven-plugin 1.5.0） |
 | **父项目** | `io.github.yuku123:z-boot-parent:1.1.0`（`<relativePath/>` 留空，parent 在 repo1 不在磁盘；repo1 实测 200） |
 | **版本权威链** | `z-boot-parent` → 第三方地板 + 兄弟仓权威表（两段内容均已并进 parent 自身，`z-boot-dependencies` / `z-boot-fleet` 两个文件夹随 2026-10-08 火车制拓扑退役）；`z-boot-parent` 的 `<z-mq.version>` 现读 **`1.3.1`**（`z-boot/z-boot-parent/pom.xml` 一处）⇒ 本仓 revision 与 parent 槽位同格 |
-| **Maven Central** | **已发布**：`z-mq` / `z-mq-common` / `z-mq-remoting` / `z-mq-store` / `z-mq-nameserver` / `z-mq-broker` / `z-mq-client` / `z-mq-spring-boot-starter` / `z-mq-tools` 九个坐标的 `1.3.1` 逐个 ranged GET 实测 **200**（`1.3.0` 同样 200）；组路径 `io/github/yuku123` |
+| **Maven Central** | **已发布**：`z-mq` / `z-mq-common` / `z-mq-remoting` / `z-mq-store` / `z-mq-nameserver` / `z-mq-broker` / `z-mq-client` / `z-mq-spring-boot-starter` / `z-mq-tools` 九个坐标的 `1.3.1` 逐个 ranged GET 实测 **200**（`1.3.0` 同样 200）；组路径 `io/github/yuku123`。2026-10-20 新增的 `z-mq-broker-admin` 不在本实测列表内 —— 它是否已上架只认 repo1 回读（本地 `~/.m2` 里它只有本地安装记录、没有 `central=` 条目） |
 | **默认端口** | NameServer **9876**、Broker **10911**（写死在两个 `Startup` 的 `args.length == 0` 分支）；`NettyServerConfig.listenPort` 字段默认 **8888**，但两个 `Startup` 都会覆盖它 ⇒ 8888 不是任何进程的实测端口；控制台 Vite dev **8081** |
 | **运行口径** | Java 8（根 `<java.version>8</java.version>`）· Spring Boot **仅** starter 模块用 2.7.18 · 日志 Log4j2 · 序列化 Jackson JSON |
-| **模块数** | Maven reactor **8 个**；另有 `z-mq-admin`（npm/Vue 工程，**不在 reactor、不在任何 pom 的 `<modules>` 里**） |
+| **模块数** | Maven reactor **9 个**；另有 `z-mq-admin`（npm/Vue 工程，**不在 reactor、不在任何 pom 的 `<modules>` 里**） |
 | **最近更新** | 2026-09-30 |
 
 ---
@@ -69,8 +69,8 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | "✅ 消息轨迹（Trace 全链路）" | `common/trace/TraceService`/`TraceBean`/`TraceType` 的引用只在 `z-mq-common` 自己包内，producer/broker/consumer 一条都不上报 |
 | "✅ ACL 访问控制（`aclEnable=true`）" | `remoting/acl/AccessValidator` + `broker/acl/PlainTextAccessValidator` 存在，但没有任何处理器调用它，也没有 `aclEnable` 这个开关（全仓 0 命中）；等拍板见 `_doc/007_backlog/feature001_acl/` |
 | "✅ Master-Slave 同步双写（`SYNC_MASTER`）/ 自动故障切换" | 全仓**没有** `BrokerRole` 类型（只有 `brokerId == 0` 判 master）；`HAService#waitForSlaveAck` 的读者只有 `HAServiceTest`；`DefaultHAService#pushToSlave` 是只打 debug 日志的桩（源码注释"MVP 简化: 不通过 Netty 推送"），`HA_PUSH_COMMITLOG(350)` 零引用；`SendStatus.FLUSH_SLAVE_TIMEOUT`/`SLAVE_NOT_AVAILABLE` 两个枚举值无人产出 ⇒ **主从只同步元数据，消息字节不复制，也没有同步双写语义**；等拍板见 `_doc/007_backlog/feature002_sync_master/` |
-| "✅ Prometheus 指标 + Grafana Dashboard 模板" | `broker/metrics/BrokerMetrics`（含 `toPrometheusFormat()`）**零调用方**，仓里没有任何 HTTP 端口、没有 actuator、没有 dashboard 文件 |
-| "✅ 可视化控制台（React + Vite + AntD，端口 8080）" | 实际是 **Vue 3 + Element Plus + Pinia + ECharts**，Vite dev 端口 **8081**；且 `src/api/index.ts` 自陈"当前 MVP 提供 mock 数据"，代理目标 `z-mq-broker-admin:9090` **在本仓不存在**（没有任何 REST 服务端） |
+| "✅ Prometheus 指标 + Grafana Dashboard 模板" | `broker/metrics/BrokerMetrics`（含 `toPrometheusFormat()`）**零调用方**；仓里没有 Prometheus 采集端点、没有 dashboard 文件 —— HTTP 面只有 `z-mq-broker-admin`（`:9090`，带 actuator）与 starter 的运维代理，两者都不吐 Prometheus 指标 |
+| "✅ 可视化控制台（React + Vite + AntD，端口 8080）" | 实际是 **Vue 3 + Element Plus + Pinia + ECharts**，Vite dev 端口 **8081**；代理目标 `z-mq-broker-admin:9090` **如今在本仓存在**（2026-10-20 新增的 `z-mq-broker-admin` 模块，`web/ZMqAdminController` 提供 REST），`src/api/index.ts` 也已从"mock 数据"改成真调用 |
 | "✅ Topic 自动创建 / 队列数动态调整" | 全仓 0 处 `autoCreate`；`SendMessageProcessor` 根本不查 `TopicConfig`（写了不报错），但路由只认已在 NameServer 注册过的 topic ⇒ 不给 5 号命令字建 topic，客户端就报 `No route for topic` |
 | "存储层 CommitLog + ConsumeQueue + Index" | **没有 `ConsumeQueue` 类，也没有 `IndexFile`**；队列位点是 `store/log/InMemoryQueueIndex`（进程内 `topic@queueId → offset` 表，重启靠 `CommitLog.load()` 全量扫 + CRC 重建） |
 | 性能基准表（18,000 / 65,000 QPS、P99 5ms 等） | 仓里没有任何一份能对得上这些读数的基准产物；只有 `PerformanceBenchmarkTest`/`ConcurrentChannelCacheBenchmarkTest` 两支挂钟阈值用例，且被 surefire **默认排除**（见「测试」） ⇒ 本 README 不再保留该表 |
@@ -81,11 +81,11 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 
 ```
 z-mq/
-├── pom.xml                     # 聚合 POM：parent=z-boot-parent:1.1.0，<revision>=1.3.1，8 个 module
+├── pom.xml                     # 聚合 POM：parent=z-boot-parent:1.1.0，<revision>=1.3.1，9 个 module
 ├── README.md                   # 本文件
 ├── LICENSE                     # MIT
 ├── _doc/006_release/sonatype-limit-request-email.txt   # 一封纯文本邮件草稿：向 Sonatype 申请提高发布配额（不是配置，也不是代码）
-├── z-mq-common/                # 协议 POJO 与共享类型（26 个 main 类）
+├── z-mq-common/                # 协议 POJO 与共享类型（28 个 main 类）
 │   └── com/zifang/z/mq/common/ #   TopicConfig/QueueData/BrokerData/TopicRouteData/MessageQueue、
 │                               #   message/{Message,MessageExt,MessageModel,BatchMessage}、
 │                               #   protocol/{SendResult,SendStatus,PullResultPayload}、filter/{Tag,Sql92}、
@@ -106,9 +106,12 @@ z-mq/
 │                               #   producer/{DefaultMQProducer,TransactionMQProducer,SendCallback,TransactionListener}、
 │                               #   consumer/{DefaultMQPushConsumer,DefaultMQPullConsumer,MessageListener,MessageQueueContext}、
 │                               #   consumer/retry/*、consumer/rebalance/*、producer/latency/*
-├── z-mq-spring-boot-starter/   # Spring Boot 自动装配（5）：ZmqAutoConfiguration、ZmqProperties(prefix=zmq)、
-│                               #   ZmqTemplate、@ZmqListener、@EnableZmq、META-INF/spring.factories
+├── z-mq-spring-boot-starter/   # Spring Boot 自动装配（9）：ZmqAutoConfiguration、ZmqProperties(prefix=zmq)、
+│                               #   ZmqTemplate、@ZmqListener、@EnableZmq、META-INF/spring.factories、
+│                               #   host/{MqHostAutoConfiguration,MqProxyController,ZMqEmbeddedServerConfig,ZMqTopicBootstrap}
 ├── z-mq-tools/                 # CLI（7）：ZmqAdmin + admin/ClusterAdmin + command/{TopicList,TopicRoute,BrokerList,CreateTopic}
+├── z-mq-broker-admin/          # 控制台后端（5）：ZMqAdminApplication、web/ZMqAdminController（REST，:9090）、
+│                               #   web/dto/{Dtos,MessageQueryRequest}、service/AdminService
 ├── z-mq-admin/                 # ⚠ npm 工程（Vue 3 + Vite + TS），不在 Maven reactor，package.json 里 private=true
 │   ├── package.json            #   name=z-mq-admin, version=1.0.0, scripts: dev/build/preview/lint/type-check
 │   └── src/{api,router,stores,views}/  # 7 个页面（Dashboard/Cluster/Topics/Messages/Consumers/Delay/Settings）
@@ -117,8 +120,9 @@ z-mq/
 
 模块依赖方向（各模块 pom 现读）：
 `common ← remoting ← {store, client, nameserver, tools}`，`broker ← {store, remoting, nameserver, client}`，
+`broker-admin ← {tools, common}`，
 `spring-boot-starter ← client`。**`z-mq-broker` 依赖 `z-mq-client`**（端到端用例住在 broker 模块里，
-所以 E2E 测试放 `z-mq-broker/src/test`）。8 个模块 POM 均无 `maven.deploy.skip` ⇒ 九个坐标全都会发布。
+所以 E2E 测试放 `z-mq-broker/src/test`）。9 个模块 POM 均无 `maven.deploy.skip` ⇒ 十个坐标全都会发布。
 
 ---
 
@@ -136,9 +140,15 @@ z-mq/
 | 构建 | Maven 多模块 + CI-friendly `${revision}` + flatten-maven-plugin 1.5.0（常开，入库/发布件落字面量）；`central` profile 负责 sources/javadoc/GPG/deploy 到 `https://central.sonatype.com` |
 | 控制台 | Vue 3.4 + Vite 5 + TypeScript 5.4 + Element Plus 2.7 + Pinia 2 + ECharts 5（`z-mq-admin/package.json`） |
 
-**没有任何部署资产**：仓内不存在 `Dockerfile`、`docker-compose*.yml`、`deploy/`、`k8s/`、`Makefile`，
-也没有 `.github/workflows/`。`_doc/003_script/build.sh` 是一份通用 Spring Boot Docker 模板
-（它 `docker build -f ./Dockerfile` 而那个文件不存在，健康检查 URL 也是空端口拼接），
+**部署资产在 `deploy/`**（2026-10-20 起不再"什么都没有"）：`Dockerfile.nameserver` / `Dockerfile.broker` /
+`Dockerfile.admin` 三个镜像定义，`docker-compose.yml` 起 **2 个**进程（`z-mq-nameserver` + `z-mq-broker`，
+容器内用服务名互访，镜像标签是本地构建的 `z-mq-*:local`、不引用远端镜像），
+`Makefile` 提供 `build` / `admin-dist` / `images` / `compose-up` / `compose-down` /
+`k8s-apply` / `k8s-status` / `k8s-clean`，`k8s/` 下是 namespace + nameserver/broker StatefulSet +
+Service + admin Deployment 五份清单，`env/.env.example` **只放占位符**（端口与路径，无凭据），
+`bin/` 两个脚本。仓里仍然没有 `.github/workflows/`。
+`_doc/003_script/build.sh` 是一份通用 Spring Boot Docker 模板
+（它 `docker build -f ./Dockerfile` 而**仓根**那个文件不存在 —— 镜像文件在 `deploy/` 下、必须带 `-f`），
 **照它跑必失败**；本仓真实可用的脚本只有 `package.sh`（`git pull` + `mvn install -DskipTests`）与
 `deploy_maven_center.sh`。旧 README 的 compose 片段与镜像名 `ghcr.io/z-opc-foundation/z-mq-*` 全部作废。
 
@@ -291,14 +301,17 @@ if (c.initialize()) { c.start(); }      // initialize()/start() 都不阻塞；s
 
 ---
 
-## 🔌 协议命令字（这不是 REST 服务，没有 HTTP 路径）
+## 🔌 协议命令字（主链路不是 REST 服务；HTTP 面只有控制台后端与运维代理）
 
-全仓 `@RequestMapping` **0 命中**：z-mq 对外只有 Netty 私有帧协议
-（`4B 帧长 | 1B 序列化类型(JSON) | 4B 头长 | JSON 头 | 4B 体长 | 体`，`NettyDecoder` 帧上限 16 MiB）。
-下表是 `RequestCode` 的 39 个常量里**真被接线的那 20 个**（`src/main` 现测）；
-其余 **19 个零引用**：`UPDATE_AND_CREATE_TOPIC_LIST`、`DELETE_TOPIC`、`GET_KV_CONFIG`、`PUT_KV_CONFIG`、
+`src/main` 里 `@RequestMapping` **1 命中**（`z-mq-spring-boot-starter` 的 `host/MqProxyController`）：
+z-mq 主链路仍只有 Netty 私有帧协议
+（`4B 帧长 | 1B 序列化类型(JSON) | 4B 头长 | JSON 头 | 4B 体长 | 体`，`NettyDecoder` 帧上限 16 MiB）；
+HTTP 面只有两处 —— 控制台后端 `z-mq-broker-admin`（`server.port=9090`）与上面那个运维代理，
+Topic/队列/位点主链路没有 HTTP 路径。
+下表是 `RequestCode` 的 39 个常量里**真被接线的那 22 个**（`src/main` 现测）；
+其余 **17 个零引用**：`UPDATE_AND_CREATE_TOPIC_LIST`、`GET_KV_CONFIG`、`PUT_KV_CONFIG`、
 `DELETE_KV_CONFIG`、`GET_CLUSTER_INFO`、`BROKER_HEARTBEAT`、`SEND_BATCH_MESSAGE`、`PULL_MESSAGE_V2`、
-`CONSUMER_HEARTBEAT`、`CONSUMER_HEARTBEAT_V2`、`QUERY_MESSAGE`、`VIEW_MESSAGE_BY_KEY`、`SEND_TRANSFER_MSG`、
+`CONSUMER_HEARTBEAT`、`CONSUMER_HEARTBEAT_V2`、`QUERY_MESSAGE`、`SEND_TRANSFER_MSG`、
 `HA_PUSH_COMMITLOG`、`CHECK_ROUTE_EXIST`、`GET_BROKER_CONFIG`、`RESET_CONSUMER_OFFSET`、`TERMINATE_CONSUMER`。
 
 | 码 | 名称 | 处理器 | 进程 |
@@ -307,12 +320,14 @@ if (c.initialize()) { c.start(); }      // initialize()/start() 都不阻塞；s
 | 3 / 311 | `GET_ROUTEINFO_BY_TOPIC` / `GET_ROUTE_BY_TOPIC` | 同上 | NameServer |
 | 4 | `GET_BROKER_CLUSTER_INFO` | 同上 | NameServer |
 | 5 | `UPDATE_AND_CREATE_TOPIC` | 同上（NameServer 侧登记路由；未收到 broker 注册时"只记 topic 不绑 broker"） | NameServer |
+| 7 | `DELETE_TOPIC` | `AdminBrokerProcessor`（`BrokerController` 已把它绑进 remoting 路由表，与 220 同走 `adminBrokerExecutor`） | Broker |
 | 8 | `GET_ALL_TOPIC_LIST` | 同上 | NameServer |
 | 100 | `BROKER_HEARTBEAT` | —— 零引用；broker 每 5s 重发的是 `REGISTER_BROKER` | — |
 | 200 | `SEND_MESSAGE` | `SendMessageProcessor` → `CommitLog.putMessage`（同步刷盘超时可回 `FLUSH_DISK_TIMEOUT`） | Broker :10911 |
 | 201 / 251 / 250 | `SEND_MESSAGE_V2`(半消息) / `END_TRANSACTION` / `CHECK_TRANSACTION_STATE` | `TransactionMessageProcessor` | Broker |
 | 210 | `PULL_MESSAGE` | `PullMessageProcessor`（长轮询挂起 + `Tag`/`SQL92` 过滤） | Broker |
 | 220 | `UPDATE_CONSUMER_OFFSET` | `ConsumerOffsetProcessor`（绑 `adminBrokerExecutor`，不占 pull 池） | Broker |
+| 231 | `VIEW_MESSAGE_BY_KEY` | `AdminBrokerProcessor`（同上，`BrokerController` 已绑进 remoting 路由表） | Broker |
 | 400 | `CREATE_TOPIC` | `AdminBrokerProcessor` 的 switch 里与 5 号同分支，**但没绑到 remoting 路由表** ⇒ 发 400 得不到处理，CLI 实际发 5 | Broker |
 | 320 / 321 / 322 / 323 / 324 | `GET_ALL_TOPIC_CONFIG` / `GET_ALL_CONSUMER_OFFSET` / `GET_ALL_DELAY_OFFSET` / `GET_ALL_SUBSCRIPTION_GROUP` / `QUERY_DATA_VERSION` | `BrokerOutAPI`（Slave 拉元数据；订阅组返回空 wrapper） | Broker |
 | 351 | `HA_REPORT_OFFSET` | `HAProcessor`（Slave 上报本地最大 offset） | Broker |
@@ -331,8 +346,10 @@ npm run build        # vue-tsc -b && vite build → dist/
 环境变量（**只写名字**）：`VITE_API_BASE_URL`（默认 `/api`，见 `src/api/index.ts`）、
 `VITE_ZMQ_ADMIN_URL`（Vite 代理目标，默认 `http://localhost:9090`，见 `vite.config.ts`）。
 
-如实说明：它是 7 个页面的 MVP，`src/api/index.ts` 自己标注"当前 MVP 提供 mock 数据"，
-代理指向的 `z-mq-broker-admin` REST 服务**在这个仓里不存在** —— 后端起来之前，控制台看到的数字都是假的。
+如实说明：它是 7 个页面的 MVP；代理指向的 `z-mq-broker-admin` REST 服务**如今就在本仓**
+（`z-mq-broker-admin` 模块，`web/ZMqAdminController`，`server.port=9090`），前端经 Vite 代理或
+打进 jar 后的同源 `static/` 访问它。`src/api/index.ts` 早年那句"当前 MVP 提供 mock 数据"已经改成真调用，
+只剩 `views/DelayView.vue` 里一处增量统计的 mock 注释。
 详细设计见 [`_doc/001_arch/06-admin.md`](_doc/001_arch/06-admin.md)。
 
 ---
@@ -345,19 +362,22 @@ mvn test -Pperf          # 把被默认排除的挂钟基准也跑上
 mvn verify               # surefire + failsafe + jacoco report
 ```
 
-实测规模（`find` + `grep -c "@Test"` 现数，不是抄文档）：
+实测规模（**2026-10-20 快照**，不是抄文档）：测试类 = `find <模块>/src/test -name '*Test*.java'` 的条数；
+`@Test` 方法 = 同一目录树里 `grep -c "@Test"` 的合计。**含本仓守卫 `ReadmeClaimsTest`**（落在 z-mq-common 那行）。
+这是带日期的快照、**不是实时读数** —— 以后增删测试类不会回写这张表；要新读数请按上面两条命令重数并改日期。
 
 | 模块 | 测试类 | `@Test` 方法 |
 |---|---|---|
-| z-mq-broker | 33 | 199 |
+| z-mq-broker | 33 | 202 |
 | z-mq-client | 17 | 126 |
 | z-mq-store | 15 | 88 |
 | z-mq-remoting | 14 | 85 |
-| z-mq-common | 13 | 92 |
+| z-mq-common | 15 | 104 |
 | z-mq-nameserver | 6 | 63 |
 | z-mq-spring-boot-starter | 1 | 16 |
 | z-mq-tools | 1 | 15 |
-| **合计** | **100** | **684** |
+| z-mq-broker-admin | 0 | 0 |
+| **合计** | **102** | **699** |
 
 如实说明这几条：
 
