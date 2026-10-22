@@ -48,7 +48,8 @@ import java.util.regex.Pattern;
  * <b>Java 侧用 z-mq-remoting 的客户端发只读请求码, 在这里转成 JSON</b>。
  *
  * <p><b>形状不是随便定的, 有仓内成品背书</b>: 同一个模式已经被两处跟踪代码用过 ——
- * {@code ZMqTopicBootstrap}(同一个 config 包)用 {@code MQClientInstance.invokeSync} 发
+ * 本仓测试夹具 {@code ZmqTestTopicBootstrap}（<b>src/test</b> 里, 2026-10-22 从生产 starter
+ * 搬走, 见 TASK-20260925-024）用 {@code MQClientInstance.invokeSync} 发
  * {@code UPDATE_AND_CREATE_TOPIC}/{@code GET_ROUTEINFO_BY_TOPIC}; {@code z-mq-tools} 的
  * {@code ClusterAdmin} 用 {@code GET_ALL_TOPIC_LIST}/{@code GET_ROUTEINFO_BY_TOPIC}/
  * {@code GET_BROKER_CLUSTER_INFO} 做只读台账。本类的请求码集合就是 {@code ClusterAdmin} 那一组

@@ -96,7 +96,24 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- 2026-10-03: host/ 包 (MqProxyController / ZMqEmbeddedServerConfig / ZMqTopicBootstrap,
+        <!-- 2026-10-22 (TASK-20260925-024): 端到端测试夹具要在**本 JVM** 里起一套
+             namesrv + broker 做取证（默认形态不得建测试 topic / 显式打开时端到端仍要跑通），
+             所以测试期需要 broker 与 nameserver —— 只在 test scope，
+             不进任何消费者的 classpath（starter 的运行期依赖仍然只有 client）。 -->
+        <dependency>
+            <groupId>io.github.yuku123</groupId>
+            <artifactId>z-mq-broker</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.yuku123</groupId>
+            <artifactId>z-mq-nameserver</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 2026-10-03: host/ 包 (MqProxyController / ZMqEmbeddedServerConfig,
              自 z-opc main-starter 平移) 的宿主侧依赖, 全部 provided —— 由宿主运行时供:
              web (RestController) / servlet / slf4j 由 spring-boot-starter 传递已有 web 之外的
              spring-core; 这里补 webmvc + servlet-api. -->

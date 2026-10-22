@@ -106,9 +106,9 @@ z-mq/
 │                               #   producer/{DefaultMQProducer,TransactionMQProducer,SendCallback,TransactionListener}、
 │                               #   consumer/{DefaultMQPushConsumer,DefaultMQPullConsumer,MessageListener,MessageQueueContext}、
 │                               #   consumer/retry/*、consumer/rebalance/*、producer/latency/*
-├── z-mq-spring-boot-starter/   # Spring Boot 自动装配（9）：ZmqAutoConfiguration、ZmqProperties(prefix=zmq)、
+├── z-mq-spring-boot-starter/   # Spring Boot 自动装配（8）：ZmqAutoConfiguration、ZmqProperties(prefix=zmq)、
 │                               #   ZmqTemplate、@ZmqListener、@EnableZmq、META-INF/spring.factories、
-│                               #   host/{MqHostAutoConfiguration,MqProxyController,ZMqEmbeddedServerConfig,ZMqTopicBootstrap}
+│                               #   host/{MqHostAutoConfiguration,MqProxyController,ZMqEmbeddedServerConfig}
 ├── z-mq-tools/                 # CLI（7）：ZmqAdmin + admin/ClusterAdmin + command/{TopicList,TopicRoute,BrokerList,CreateTopic}
 ├── z-mq-broker-admin/          # 控制台后端（5）：ZMqAdminApplication、web/ZMqAdminController（REST，:9090）、
 │                               #   web/dto/{Dtos,MessageQueryRequest}、service/AdminService
@@ -122,7 +122,10 @@ z-mq/
 `common ← remoting ← {store, client, nameserver, tools}`，`broker ← {store, remoting, nameserver, client}`，
 `broker-admin ← {tools, common}`，
 `spring-boot-starter ← client`。**`z-mq-broker` 依赖 `z-mq-client`**（端到端用例住在 broker 模块里，
-所以 E2E 测试放 `z-mq-broker/src/test`）。9 个模块 POM 均无 `maven.deploy.skip` ⇒ 十个坐标全都会发布。
+所以 E2E 测试放 `z-mq-broker/src/test`）。**`z-mq-spring-boot-starter` 的运行期依赖仍然只有 client**
+（2026-10-22 起它的 `pom.xml` 多了两条 **test scope** 的 `z-mq-broker` / `z-mq-nameserver` ——
+starter 自己的测试夹具要起一套本 JVM 的 namesrv + broker 做端到端取证；test scope 不进任何消费者的 classpath）。
+9 个模块 POM 均无 `maven.deploy.skip` ⇒ 十个坐标全都会发布。
 
 ---
 
@@ -365,6 +368,8 @@ mvn verify               # surefire + failsafe + jacoco report
 实测规模（**2026-10-22 快照**，不是抄文档）：测试类 = `find <模块>/src/test -name '*Test*.java'` 的条数；
 `@Test` 方法 = 同一目录树里 `grep -c "@Test"` 的合计。**含本仓守卫 `ReadmeClaimsTest`**（落在 z-mq-common 那行）。
 这是带日期的快照、**不是实时读数** —— 以后增删测试类不会回写这张表；要新读数请按上面两条命令重数并改日期。
+（2026-10-22 TASK-20260925-024 又在本仓加了测试文件：`z-mq-spring-boot-starter` 1 → **6** 个测试类 / 16 → **24** 个 `@Test`；
+按上面那句口径**本表不回写**，下次统一重数。）
 
 | 模块 | 测试类 | `@Test` 方法 |
 |---|---|---|
