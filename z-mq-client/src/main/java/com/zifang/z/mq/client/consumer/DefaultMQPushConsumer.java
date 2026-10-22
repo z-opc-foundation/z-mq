@@ -22,7 +22,6 @@ import com.zifang.z.mq.remoting.protocol.RequestCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -213,7 +212,7 @@ public class DefaultMQPushConsumer {
                 }
 
                 // 广播模式：每个实例拉取所有队列
-                // 集群模式：当前简化实现也拉取所有队列（完整实现需要 rebalance）
+                // 集群模式：当前实现也拉取所有队列（rebalance 尚未接入）
                 Set<String> seenBrokers = new HashSet<>();
                 for (BrokerData bd : routeData.getBrokerDatas()) {
                     if (!seenBrokers.add(bd.getBrokerName())) {
@@ -637,8 +636,4 @@ public class DefaultMQPushConsumer {
         }
     }
 
-    static {
-        // 占位：保证 import 使用
-        Collections.emptyList();
-    }
 }

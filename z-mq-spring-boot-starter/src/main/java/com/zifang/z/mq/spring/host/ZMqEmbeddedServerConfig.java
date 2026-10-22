@@ -102,7 +102,7 @@ public class ZMqEmbeddedServerConfig {
         String javaBin = (javaHome != null && !javaHome.isEmpty() ? javaHome : "") + "/bin/java";
         // 用 Spring Boot JarLauncher 跑不同 Main 类 (Start-Class 通过 PropertiesLauncher 不可用)
         // 实际做法: 提取 BOOT-INF/lib + BOOT-INF/classes 到 classpath, java -cp 直接跑 Main
-        // (Spring Boot Loader 2.7+ 没有 PropertiesLauncher, 走简化路线)
+        // (Spring Boot Loader 2.7+ 没有 PropertiesLauncher，改用 jar 直启)
         String extractedDir = extractBootJar(bootJar);
         String cp = extractedDir + "/BOOT-INF/classes";
         File libDir = new File(extractedDir, "BOOT-INF/lib");

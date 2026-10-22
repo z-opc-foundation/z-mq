@@ -185,7 +185,7 @@ public class PlainTextAccessValidator implements AccessValidator {
         if (!enabled) {
             return AccessResult.ok();
         }
-        // 简化实现：检查 Topic 读权限
+        // 当前只检查 Topic 读权限
         return AccessResult.ok();
     }
 

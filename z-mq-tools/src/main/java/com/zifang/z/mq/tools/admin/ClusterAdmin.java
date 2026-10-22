@@ -222,7 +222,7 @@ public class ClusterAdmin {
     /**
      * 查询 broker 上的订阅组列表 (通过 Broker 端口).
      * <p>
-     * 走 GET_ALL_SUBSCRIPTION_GROUP —— 该命令在 broker 侧当前返回空表（MVP 未实现订阅组存储），
+     * 走 GET_ALL_SUBSCRIPTION_GROUP —— 该命令在 broker 侧当前返回空表（订阅组配置尚未单独存储），
      * 这里如实把空结果透传上去，不伪造条目。
      */
     public Map<String, Object> listConsumerGroups(String brokerAddr) {

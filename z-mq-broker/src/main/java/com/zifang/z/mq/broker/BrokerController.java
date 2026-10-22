@@ -430,8 +430,8 @@ public class BrokerController {
     /**
      * 向所有配置的 NameServer 注册本 Broker, 维持心跳.
      *
-     * @param checkOrderConfig 是否需要核对顺序消息配置 (MVP 忽略)
-     * @param oneway           是否为 oneway 请求 (不等待响应, MVP 不支持)
+     * @param checkOrderConfig 是否需要核对顺序消息配置（当前实现不处理顺序消息配置）
+     * @param oneway           是否为 oneway 请求（当前实现按同步请求处理）
      */
     private void registerBrokerAll(boolean checkOrderConfig, boolean oneway) {
         if (namesrvRemotingClient == null) {

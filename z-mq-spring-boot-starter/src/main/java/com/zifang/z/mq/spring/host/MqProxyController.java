@@ -312,7 +312,7 @@ public class MqProxyController {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_CONSUMER_OFFSET, null);
     }
 
-    /** broker {@code GET_ALL_DELAY_OFFSET(322)}（源码注释：简化为由 Topic 自身 offset 推导） */
+    /** broker {@code GET_ALL_DELAY_OFFSET(322)}（由 Topic 自身 offset 推导） */
     @GetMapping(PREFIX + "/broker/delay-offset")
     public void brokerDelayOffset(@RequestParam(value = "brokerName", required = false) String brokerName,
                                   @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
@@ -322,7 +322,7 @@ public class MqProxyController {
 
     /**
      * broker {@code GET_ALL_SUBSCRIPTION_GROUP(323)}。
-     * <b>已知恒空</b>: BrokerOutAPI 的注释写的是「订阅组配置 (MVP 暂返回空)」——
+     * <b>已知恒空</b>：BrokerOutAPI 对订阅组配置返回的是空 wrapper ——
      * 所以这一页的空表不是"没有订阅组"，是"上游没实现"，页面必须把这句挂出来。
      */
     @GetMapping(PREFIX + "/broker/subscription")

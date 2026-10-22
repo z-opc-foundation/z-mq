@@ -139,7 +139,7 @@ public class ZMqTopicBootstrap {
         if (body == null || body.length < 30) return false;
         String bodyStr = new String(body, java.nio.charset.StandardCharsets.UTF_8);
         // 检查 queueDatas 不为空数组 — 如果 topic 没绑 broker, queueDatas 不会出现或为空
-        // 简化判断: 包含 "queueDatas":" 后面不是 []  (即包含至少一个 queue)
+        // 判断: 包含 "queueDatas":" 后面不是 []（即至少有一个 queue）
         int idx = bodyStr.indexOf("\"queueDatas\":");
         if (idx < 0) return false;
         int bracketIdx = bodyStr.indexOf('[', idx);

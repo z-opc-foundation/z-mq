@@ -40,7 +40,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 
 | 能力 | 实现位置 | 实测口径 |
 |------|----------|----------|
-| Broker 注册/注销 + 路由查询 | `nameserver/RouteInfoManager`、`DefaultRequestProcessor`（case 1/2/3/311/4/8/5）、10s 扫描不活跃 broker | NameServer 侧只有这 7 个 case，见下方命令字表 |
+| Broker 注册/注销 + 路由查询 | `nameserver/RouteInfoManager`、`DefaultRequestProcessor`（case 1/2/3/311/4/8/5）、10s 扫描不活跃 broker | NameServer 侧只有这 7 个 case，见下方命令字表；**topic 路由随 broker 重启存活**（broker 掉线只摘它的地址，不删 topic 的队列项；broker 重新注册后路由自动恢复，见 `RouteInfoManager#syncTopicsOfBroker`） |
 | 同步 / 异步 / oneway 发送 | `client/producer/DefaultMQProducer#send`、`#send(msg, SendCallback)`、`#sendOneway` | oneway 真走 `invokeOneway`；异步回调固定在 remoting `callbackExecutor` 线程 |
 | 指定队列发送（顺序的生产侧入口） | `DefaultMQProducer#send(Message, MessageQueue)` | 没有 `MessageQueueSelector` 接口，只有"你自己把 `MessageQueue` 传进来" |
 | 拉取消费 + 长轮询 | `broker/processor/PullMessageProcessor`、`longpoll/PullRequestHoldService` | 空拉按预算挂起，`MAX_SUSPEND_BUDGET_MILLIS = 30_000`；新消息到达即唤醒并回写 `suspendWakeup` |
@@ -51,7 +51,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | 建 Topic 的运维通路 | `z-mq-tools`：`ZmqAdmin` + `ClusterAdmin#createTopic` → 码 5 | `ZmqAdmin` 注册的命令只有 4 条：`topicList`/`topicRoute`/`brokerList`/`createTopic` |
 | 事务消息（半消息 / 二次确认 / 回查 / 重启恢复） | `broker/processor/TransactionMessageProcessor`（201/251/250）、`transaction/TransactionStateManager`、`TransactionStateRecovery`、`TransactionCheckService`；客户端 `TransactionMQProducer` | 半消息走独立码 201（不与 200 同码分诊）；`recover()` 从 CommitLog 重建 pending 集合；broker 侧回查拿不到本地事务结论时恒返回 `UNKNOWN`，定论必须由 producer 用 251 送进来 |
 | 消费失败重投 + 死信 | `client/consumer/retry/ConsumeRetryService`（`DEFAULT_MAX_RECONSUME_TIMES = 16`）、`RetryPolicy.STEPPED/FIXED`、`DeadLetterQueue`（Topic 名 `%DLQ%{group}`）、`BrokerBackedRetryTransport` | 重投副本与死信都经真 `SEND_MESSAGE` 外投；⚠️ 死信 Topic **必须先注册**（本仓没有 autocreate 通路），见 `_doc/007_backlog/feature006_dlq_topic_registration/` |
-| 顺序存储 + 崩溃恢复 | `store/log/CommitLog`、`MappedFile`、`MappedFileQueue`、`MessageCodec`（逐条 CRC） | `CommitLog.load()` 无条件全量扫描重建内存索引；`MAX_MESSAGE_SIZE = 4 MiB`，`mappedFileSizeCommitLog = 1 GiB` |
+| 顺序存储 + 崩溃恢复 | `store/log/CommitLog`、`MappedFile`、`MappedFileQueue`、`MessageCodec`（逐条 CRC） | `CommitLog.load()` 无条件全量扫描重建内存索引；`MAX_MESSAGE_SIZE = 4 MiB`，`mappedFileSizeCommitLog = 1 GiB`；记录的 `bodyCRC` 逐条真算真验，**协议层 JSON 往返也不丢**（`MessageExtBrokerInner` 不再重复声明父类同名字段，守卫 `MessageExtBrokerInnerJsonTest`） |
 | 同步刷盘 / 异步刷盘 | `store/log/FlushDiskType`（默认 `ASYNC_FLUSH`）、`MessageStoreConfig.syncFlushTimeout = 5000` | 同步刷盘超时 ⇒ broker 明确回 `SendStatus.FLUSH_DISK_TIMEOUT` |
 | Slave 元数据同步 | `broker/slave/SlaveSynchronize` + `outapi/BrokerOutAPI`（320/321/322/323/324），`brokerId != 0` 时启动，默认 30s 一轮 | 同步的是 TopicConfig / ConsumerOffset / DelayOffset / 版本号；订阅组那份是空 wrapper（源码自陈 MVP 未实现） |
 | Spring Boot 接入 | `z-mq-spring-boot-starter`：`ZmqAutoConfiguration` + `ZmqProperties` + `ZmqTemplate` + `@ZmqListener` + `@EnableZmq` + `META-INF/spring.factories` | 配置前缀是 **`zmq`**（不是 `z.mq`） |
@@ -61,7 +61,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 
 | 旧 README 的说法 | `src/main` 实测 |
 |---|---|
-| "✅ 延迟消息（18 个固定延迟级别）" | `ScheduleMessageService` 18 级 DelayQueue + 单测齐备，但 `schedule(...)` 在 `src/main` **零调用方**；`Message#setDelayTimeLevel/getDelayTimeLevel`（property key `DELAY`）除自身与 `MessageTest` 外无人读写 ⇒ **设了级别也不会延迟**，消息立刻可见 |
+| "✅ 延迟消息（18 个固定延迟级别）" | `ScheduleMessageService` 18 级 DelayQueue + 单测齐备，但 `schedule(...)` 在 `src/main` **零调用方**；`Message#setDelayTimeLevel/getDelayTimeLevel`（property key `DELAY`）除自身与 `MessageTest` 外无人读写 ⇒ **设了级别也不会延迟**，消息立刻可见。排产归属见 `_doc/007_backlog/feature014_delay_message_wiring/` |
 | "✅ 广播消费（`MessageModel.BROADCASTING`）" | `DefaultMQPushConsumer` 存了 `messageModel` 字段、只有 getter/setter；`doPull()` 注释自陈"集群模式：当前简化实现也拉取所有队列" ⇒ 同组多实例各自消费全量，**效果既不是集群也不是广播** |
 | "✅ 顺序消息（全局/局部顺序，通过 `MessageQueueSelector`）" | 没有 `MessageQueueSelector` 这个类型；rebalance 策略类（`AllocateMessageQueueAveragely`/`ConsistentHash`）只有单测读者、没接进消费者；`MessageListener.Orderly` 有分发分支，但推送消费是单线程串行，既没有队列锁也没有 per-queue 线程 |
 | "✅ 批量消息（单批 ≤ 4MiB / ≤ 1024 条）" | `common/message/BatchMessage` 在 `src/main`/`src/test` 均无读者，命令字 `SEND_BATCH_MESSAGE(202)` 零引用 ⇒ 无批量通路 |
@@ -69,7 +69,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 | "✅ 消息轨迹（Trace 全链路）" | `common/trace/TraceService`/`TraceBean`/`TraceType` 的引用只在 `z-mq-common` 自己包内，producer/broker/consumer 一条都不上报 |
 | "✅ ACL 访问控制（`aclEnable=true`）" | `remoting/acl/AccessValidator` + `broker/acl/PlainTextAccessValidator` 存在，但没有任何处理器调用它，也没有 `aclEnable` 这个开关（全仓 0 命中）；等拍板见 `_doc/007_backlog/feature001_acl/` |
 | "✅ Master-Slave 同步双写（`SYNC_MASTER`）/ 自动故障切换" | 全仓**没有** `BrokerRole` 类型（只有 `brokerId == 0` 判 master）；`HAService#waitForSlaveAck` 的读者只有 `HAServiceTest`；`DefaultHAService#pushToSlave` 是只打 debug 日志的桩（源码注释"MVP 简化: 不通过 Netty 推送"），`HA_PUSH_COMMITLOG(350)` 零引用；`SendStatus.FLUSH_SLAVE_TIMEOUT`/`SLAVE_NOT_AVAILABLE` 两个枚举值无人产出 ⇒ **主从只同步元数据，消息字节不复制，也没有同步双写语义**；等拍板见 `_doc/007_backlog/feature002_sync_master/` |
-| "✅ Prometheus 指标 + Grafana Dashboard 模板" | `broker/metrics/BrokerMetrics`（含 `toPrometheusFormat()`）**零调用方**；仓里没有 Prometheus 采集端点、没有 dashboard 文件 —— HTTP 面只有 `z-mq-broker-admin`（`:9090`，带 actuator）与 starter 的运维代理，两者都不吐 Prometheus 指标 |
+| "✅ Prometheus 指标 + Grafana Dashboard 模板" | `broker/metrics/BrokerMetrics`（含 `toPrometheusFormat()`）**零调用方**；仓里没有 Prometheus 采集端点、没有 dashboard 文件 —— HTTP 面只有 `z-mq-broker-admin`（`:9090`，带 actuator）与 starter 的运维代理，两者都不吐 Prometheus 指标。排产归属见 `_doc/007_backlog/feature015_broker_metrics_export/` |
 | "✅ 可视化控制台（React + Vite + AntD，端口 8080）" | 实际是 **Vue 3 + Element Plus + Pinia + ECharts**，Vite dev 端口 **8081**；代理目标 `z-mq-broker-admin:9090` **如今在本仓存在**（2026-10-20 新增的 `z-mq-broker-admin` 模块，`web/ZMqAdminController` 提供 REST），`src/api/index.ts` 也已从"mock 数据"改成真调用 |
 | "✅ Topic 自动创建 / 队列数动态调整" | 全仓 0 处 `autoCreate`；`SendMessageProcessor` 根本不查 `TopicConfig`（写了不报错），但路由只认已在 NameServer 注册过的 topic ⇒ 不给 5 号命令字建 topic，客户端就报 `No route for topic` |
 | "存储层 CommitLog + ConsumeQueue + Index" | **没有 `ConsumeQueue` 类，也没有 `IndexFile`**；队列位点是 `store/log/InMemoryQueueIndex`（进程内 `topic@queueId → offset` 表，重启靠 `CommitLog.load()` 全量扫 + CRC 重建） |
@@ -362,7 +362,7 @@ mvn test -Pperf          # 把被默认排除的挂钟基准也跑上
 mvn verify               # surefire + failsafe + jacoco report
 ```
 
-实测规模（**2026-10-20 快照**，不是抄文档）：测试类 = `find <模块>/src/test -name '*Test*.java'` 的条数；
+实测规模（**2026-10-22 快照**，不是抄文档）：测试类 = `find <模块>/src/test -name '*Test*.java'` 的条数；
 `@Test` 方法 = 同一目录树里 `grep -c "@Test"` 的合计。**含本仓守卫 `ReadmeClaimsTest`**（落在 z-mq-common 那行）。
 这是带日期的快照、**不是实时读数** —— 以后增删测试类不会回写这张表；要新读数请按上面两条命令重数并改日期。
 
@@ -370,14 +370,20 @@ mvn verify               # surefire + failsafe + jacoco report
 |---|---|---|
 | z-mq-broker | 33 | 202 |
 | z-mq-client | 17 | 126 |
-| z-mq-store | 15 | 88 |
+| z-mq-store | 16 | 89 |
 | z-mq-remoting | 14 | 85 |
 | z-mq-common | 15 | 104 |
 | z-mq-nameserver | 6 | 63 |
 | z-mq-spring-boot-starter | 1 | 16 |
 | z-mq-tools | 1 | 15 |
 | z-mq-broker-admin | 0 | 0 |
-| **合计** | **102** | **699** |
+| **合计** | **103** | **700** |
+
+**真正跑了多少**（2026-10-22 本机 `mvn -o -B test` 的 surefire 汇总行，逐模块相加）：
+**675 tests / 0 failures / 0 errors / 0 skipped**，分模块 `104 / 82 / 86 / 59 / 126 / 187 / 16 / 15`，
+`BUILD SUCCESS`、10 个 reactor 项目全 SUCCESS（`z-mq-broker-admin` 无测试类，不参与计数）。
+注意这张表数的是 `@Test` **标记**（含 `@TestInstance` 之类会被一起数进去），与 surefire 实跑的 675 不是同一个口径；
+判断"测试绿不绿"只认 surefire 的 `Tests run:` 行，且**`Tests run: 0` 不算绿**（那是测试根本没跑起来）。
 
 如实说明这几条：
 
@@ -470,5 +476,8 @@ _Maintained by the z-opc-foundation organization._
   - [`feature010_push_offset_silent_commit_failure/001_待排产归属.md`](_doc/007_backlog/feature010_push_offset_silent_commit_failure/001_待排产归属.md) — 位点提交静默失败
   - [`feature011_jvm_pause_drops_broker_response/001_待排产归属.md`](_doc/007_backlog/feature011_jvm_pause_drops_broker_response/001_待排产归属.md) — 偶发 10s 无响应
   - [`feature012_producer_retry_uncovered_shapes/001_待排产归属.md`](_doc/007_backlog/feature012_producer_retry_uncovered_shapes/001_待排产归属.md) — producer 重试未覆盖面
+  - [`feature013_console_mock_swallows_every_failure/001_等拍板.md`](_doc/007_backlog/feature013_console_mock_swallows_every_failure/001_等拍板.md) — 控制台 7 个接口的 mock 兜底吞掉全部后端失败
+  - [`feature014_delay_message_wiring/001_待排产.md`](_doc/007_backlog/feature014_delay_message_wiring/001_待排产.md) — 延迟消息整条未接线（18 级 DelayQueue 零调用方）
+  - [`feature015_broker_metrics_export/001_待排产.md`](_doc/007_backlog/feature015_broker_metrics_export/001_待排产.md) — `BrokerMetrics` 零 feeder、无只读导出端点
 
 各文档详细说明见各子目录。

@@ -28,7 +28,7 @@ import java.util.Map;
  *   <li>TopicConfig — Topic 路由配置 (createTopic/updateTopic/deleteTopic)</li>
  *   <li>ConsumerOffset — Consumer 消费进度</li>
  *   <li>DelayOffset — 延迟消息投递进度</li>
- *   <li>SubscriptionGroup — 订阅关系 (MVP 暂未实现)</li>
+ *   <li>SubscriptionGroup — 订阅关系（尚未单独存储，取到的恒是空表）</li>
  * </ul>
  *
  * <p>同步策略:
@@ -207,7 +207,7 @@ public class SlaveSynchronize {
         // 写入 ConsumerOffsetManager
         ConsumerOffsetManager mgr = brokerController.getConsumerOffsetManager();
         if (mgr != null) {
-            // MVP 简化: Slave 上 consumer offset 与 Master 共享 (强一致)
+            // Slave 上的 consumer offset 与 Master 共享（强一致）：本仓没有 slave 侧独立存储
             // 生产场景应区分: 消费进度从 Master 同步, 但 Slave 不允许 commit
             Map<String, Map<Integer, Long>> offsetTable = wrapper.getOffsetTable();
             for (Map.Entry<String, Map<Integer, Long>> topicEntry : offsetTable.entrySet()) {
@@ -249,7 +249,7 @@ public class SlaveSynchronize {
             return;
         }
 
-        // MVP: 延迟 offset 与 consumer offset 共享存储, 仅记录版本号
+        // 延迟 offset 与 consumer offset 共享存储，仅记录版本号
         log.info("syncDelayOffset: version={}", wrapper.getDataVersion());
         localDelayOffsetVersion.setTimestamp(wrapper.getDataVersion().getTimestamp());
         localDelayOffsetVersion.getCounter().set(wrapper.getDataVersion().getCounterValue());

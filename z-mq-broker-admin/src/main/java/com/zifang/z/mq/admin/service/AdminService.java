@@ -227,8 +227,8 @@ public class AdminService implements InitializingBean, DisposableBean {
         }
         Map<String, Object> raw = clusterAdmin.listConsumerGroups(brokerAddr);
         if (raw == null || raw.isEmpty()) {
-            // broker 侧 GET_ALL_SUBSCRIPTION_GROUP 当前返回空表（MVP 未实现订阅组存储），
-            // 如实返回空列表，不造占位数据
+            // broker 侧 GET_ALL_SUBSCRIPTION_GROUP 当前返回空表（订阅组配置尚未单独持久化，
+            // 见 _doc/007_backlog/feature005_metadata_lifecycle/），如实返回空列表，不造假数据
             return Collections.emptyList();
         }
         List<ConsumerGroupInfoDto> list = new ArrayList<>();

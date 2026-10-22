@@ -368,7 +368,7 @@ public class Sql92Filter implements MessageFilter {
 
             if (token.type == TokenType.LPAREN) {
                 advance();
-                SqlValue result = parseValue(); // 简化：递归解析
+                SqlValue result = parseValue(); // 递归解析
                 expect(TokenType.RPAREN);
                 return result;
             }

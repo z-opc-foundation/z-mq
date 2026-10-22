@@ -112,7 +112,7 @@ public final class MessageCodec {
         ByteBuffer buffer = ByteBuffer.allocate(total);
         buffer.putInt(total);
         buffer.putInt(CommitLog.MESSAGE_MAGIC_CODE_V2);
-        buffer.putInt(0); // crc 占位，最后回填
+        buffer.putInt(0); // crc 先写 0，编码结束后回填
         buffer.putInt(msg.getQueueId());
         buffer.putInt(msg.getSysFlag());
         buffer.putInt(msg.getFlag());

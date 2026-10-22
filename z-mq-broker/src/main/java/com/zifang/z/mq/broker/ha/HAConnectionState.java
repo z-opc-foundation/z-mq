@@ -3,7 +3,7 @@ package com.zifang.z.mq.broker.ha;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Master 端维护的 Slave 连接状态（对标 RocketMQ HAConnection 简化版）.
+ * Master 端维护的 Slave 连接状态（对标 RocketMQ HAConnection 的精简版）.
  * <p>
  * 每个 Slave 注册到 Master 后, Master 创建一个 HAConnectionState:
  * <ul>

@@ -282,7 +282,7 @@ public class RemotingCommand {
     }
 
     /**
-     * 设置序列化类型（占位方法）
+     * 设置序列化类型（当前协议只有 JSON 一种实现，入参不参与编码）
      *
      * @param serializeTypeCurrentRPC 序列化类型
      */

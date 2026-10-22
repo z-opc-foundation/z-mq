@@ -103,14 +103,14 @@ public class DefaultRequestProcessor implements NettyRemotingAbstract.NettyReque
                 clusterName, brokerAddr, brokerName, brokerId, haServerAddr,
                 ctx == null ? null : ctx.channel());
 
-        // 把 TopicConfig 注册进 topicQueueTable。注册报文是全量快照，所以先清掉这个 broker
-        // 名下的旧条目 —— 否则它删掉的 topic 会永远留在路由表里（控制台里是一条 0 队列的幽灵）
-        nameServerController.getRouteInfoManager().unregisterTopicsOfBroker(brokerName);
-        if (topicConfigList != null) {
-            for (TopicConfig tc : topicConfigList) {
-                nameServerController.getRouteInfoManager().registerTopic(brokerName, tc);
-            }
-        }
+        // 把 TopicConfig 注册进 topicQueueTable。注册报文是 broker 的【全量快照】，
+        // 但"快照里没有"有两种含义，syncTopicsOfBroker 只删其中该删的那种：
+        //   · 这个 broker 上次上报过、这次不报了 ⇒ broker 上把 topic 删了 ⇒ 路由表里那条要删
+        //     （不然控制台里是一条 0 队列的幽灵 topic）；
+        //   · 这个 broker 从来没上报过 ⇒ topic 是直接发给 NameServer 建的 ⇒ 不许删
+        //     （照旧"先整体清掉再重填"的话，broker 一重启这类 topic 的路由就没了，
+        //      客户端一律 "No route for topic" —— 见 RouteInfoManager#syncTopicsOfBroker 的注释）。
+        nameServerController.getRouteInfoManager().syncTopicsOfBroker(brokerName, topicConfigList);
 
         response.setBody(JsonCodec.encode(result));
         log.info("Broker registered: cluster={} brokerName={} brokerAddr={} brokerId={}",
@@ -195,8 +195,9 @@ public class DefaultRequestProcessor implements NettyRemotingAbstract.NettyReque
     /**
      * 处理 UPDATE_AND_CREATE_TOPIC — 在 NameServer 侧建立 topicQueueTable 中的 Topic 入口.
      * <p>
-     * 这里不分配 QueueData 的 brokerName (集群模式下需要再向所有 Broker 同步), MVP 简化
-     * 为 "topicQueueTable 收到 topic → 所有已注册 broker 都覆盖一份 QueueData"。
+     * 这里的口径是 "topicQueueTable 收到 topic → 所有已注册 broker 都覆盖一份 QueueData"。
+     * <p>
+     * 路由随 broker 重启存活的规则见 {@code RouteInfoManager#syncTopicsOfBroker}。
      */
     private RemotingCommand handleUpdateAndCreateTopic(RemotingCommand request) {
         RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SUCCESS);
@@ -214,7 +215,7 @@ public class DefaultRequestProcessor implements NettyRemotingAbstract.NettyReque
         int writeN = writeNStr == null ? 4 : Integer.parseInt(writeNStr);
         TopicConfig config = new TopicConfig(topic, readN, writeN, TopicConfig.PERM_READ_WRITE);
 
-        // 把 Topic 关联到所有已注册 broker（简化: 同集群全共享）
+        // 把 Topic 关联到所有已注册 broker（同集群共享）
         java.util.Collection<BrokerData> brokers = nameServerController.getRouteInfoManager().getBrokerAddrTable().values();
         if (brokers.isEmpty()) {
             // NameServer 尚未收到 Broker 注册, 仍然记录 topic 但不绑 broker

@@ -1,5 +1,9 @@
 # Z-MQ Console
 
+
+> ℹ️ 本文是**控制台设计稿**。它的拓扑（Vue 3 + Vite + Element Plus，8081 → 9090 代理）
+> 与今天的实现一致；细节若与代码冲突，以仓库根 [`README.md`](../../README.md) 的
+> 「控制台 `z-mq-admin`」一节与 `z-mq-admin/`、`z-mq-broker-admin/` 两个目录的实际代码为准。
 > Z-MQ 控制台 — 集群 / Topic / Producer / Consumer 可视化管理 (对标 Apache RocketMQ Console)
 
 ## 一句话定位

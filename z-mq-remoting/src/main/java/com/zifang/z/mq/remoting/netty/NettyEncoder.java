@@ -11,7 +11,7 @@ import io.netty.handler.codec.MessageToByteEncoder;
  */
 public class NettyEncoder extends MessageToByteEncoder<RemotingCommand> {
 
-    // 长度占位符（4字节）
+    // 长度字段（4 字节，编码时先写 0、编码结束后回填）
     private static final byte[] LENGTH_PLACEHOLDER = new byte[4];
 
     @Override
@@ -20,7 +20,7 @@ public class NettyEncoder extends MessageToByteEncoder<RemotingCommand> {
             // 记录起始位置用于回填总长度
             int beginIndex = out.writerIndex();
 
-            // 1. 总长度占位（最后回填）
+            // 1. 总长度先写 0（最后回填）
             out.writeBytes(LENGTH_PLACEHOLDER);
 
             // 2. 序列化类型

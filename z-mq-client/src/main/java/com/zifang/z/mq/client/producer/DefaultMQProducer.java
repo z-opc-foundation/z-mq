@@ -22,7 +22,6 @@ import com.zifang.z.mq.remoting.protocol.RequestCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.Serializable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -72,7 +71,7 @@ public class DefaultMQProducer {
     }
 
     public void shutdown() {
-        // 简化：每个 Producer 共享一份 instance，但生产端通常应保留
+        // 每个 Producer 共享一份 instance（生产端通常应各自保留一份）
         for (MQClientInstance ins : instanceTable.values()) {
             ins.shutdown();
         }
@@ -504,9 +503,4 @@ public class DefaultMQProducer {
         this.clientId = clientId;
     }
 
-    /** P 占位.
-     */
-    static class P implements Serializable {
-        private static final long serialVersionUID = 1L;
-    }
 }

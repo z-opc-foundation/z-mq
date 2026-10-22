@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>Slave 模式: 启动 HAClient 连接到 Master, 周期性 pull Master CommitLog 增量</li>
  * </ul>
  * <p>
- * 实现简化:
+ * 实现要点:
  * <ul>
  *   <li>用 {@link LinkedBlockingQueue} 暂存待推送的消息 (Master -> Slave)</li>
  *   <li>后台 daemon 线程把队列里消息通过 HA_PUSH_COMMITLOG 推给所有 Slave</li>
@@ -211,7 +211,7 @@ public class DefaultHAService implements HAService {
             // 清理过期连接
             cleanupExpired();
 
-            // 推送给所有 slave (简化: 直接通过 SlaveSynchronize 复用 NettyRemotingClient)
+            // 推送给所有 slave（直接复用 SlaveSynchronize 持有的 NettyRemotingClient）
             // 实际 RocketMQ 是每个 HAConnection 一个 writer 线程
             for (Map.Entry<String, HAConnectionState> e : slaveConnections.entrySet()) {
                 pushToSlave(e.getKey(), entry);
@@ -223,10 +223,10 @@ public class DefaultHAService implements HAService {
     /**
      * 推送单条消息给指定 slave.
      * <p>
-     * MVP: 通过 SlaveSynchronize 持有的 NettyRemotingClient 发送 HA_PUSH_COMMITLOG.
+     * 通过 SlaveSynchronize 持有的 NettyRemotingClient 发送 HA_PUSH_COMMITLOG。
      */
     private void pushToSlave(String slaveAddr, HAPushEntry entry) {
-        // MVP 简化: 不通过 Netty 推送, 让 Slave 主动拉取
+        // 不通过 Netty 推送，让 Slave 主动拉取
         // 推送语义留给后续 PR 实现 (需要 slave 暴露 receive 端点)
         // 这里仅记录日志
         if (log.isDebugEnabled()) {
@@ -298,7 +298,7 @@ public class DefaultHAService implements HAService {
             reportOffsetToMaster(client, masterAddr, localOffset);
 
             // 2) 拉取 Master 新消息 (后续 PR 实现 HA_PULL_COMMITLOG RPC)
-            // MVP 简化: 仅心跳上报, 不主动拉取增量
+            // 仅心跳上报，不主动拉取增量
             // (通过 BrokerOutAPI / HAProcessor 扩展实现增量拉取)
             if (log.isTraceEnabled()) {
                 log.trace("Slave HA loop: local offset={}", localOffset);
@@ -333,12 +333,12 @@ public class DefaultHAService implements HAService {
     /**
      * Slave 写入 Master 推送的消息 (由 HAClient 拉取后调用).
      * <p>
-     * MVP: 本接口预留, 实际写入走 BrokerController 的 SendMessageProcessor 复用.
+     * 本接口预留，实际写入复用 BrokerController 的 SendMessageProcessor。
      */
     public void writeSlaveMessage(byte[] bodyBytes) {
         if (!slave) return;
         if (bodyBytes == null || bodyBytes.length == 0) return;
-        // MVP: 实际写入逻辑由 HAClient 后续 PR 实现
+        // 实际写入逻辑待 HAClient 补齐
         // 这里仅记录日志
         if (log.isDebugEnabled()) {
             log.debug("writeSlaveMessage: {} bytes", bodyBytes.length);

@@ -28,8 +28,8 @@ import java.util.Map;
  * <ul>
  *   <li>{@code GET_ALL_TOPIC_CONFIG}: 返回所有 Topic 配置 (含版本号)</li>
  *   <li>{@code GET_ALL_CONSUMER_OFFSET}: 返回所有 ConsumerOffset (含版本号)</li>
- *   <li>{@code GET_ALL_DELAY_OFFSET}: 返回所有延迟消息 offset (简化: 由 Topic 自身 offset 推导)</li>
- *   <li>{@code GET_ALL_SUBSCRIPTION_GROUP}: 返回订阅组配置 (MVP 暂返回空)</li>
+ *   <li>{@code GET_ALL_DELAY_OFFSET}: 返回所有延迟消息 offset（由 Topic 自身 offset 推导）</li>
+ *   <li>{@code GET_ALL_SUBSCRIPTION_GROUP}: 返回订阅组配置（订阅组尚未单独存储，恒返回空）</li>
  *   <li>{@code QUERY_DATA_VERSION}: 返回 Master 数据版本号 (用于增量同步判断)</li>
  * </ul>
  *
@@ -100,7 +100,7 @@ public class BrokerOutAPI implements NettyRemotingAbstract.NettyRequestProcessor
     }
 
     /**
-     * MVP: 延迟消息 offset 与 Topic 自身 offset 共享 (无 SCHEDULE_TOPIC_XXXX 隔离队列).
+     * 延迟消息 offset 与 Topic 自身 offset 共享（没有 SCHEDULE_TOPIC_XXXX 隔离队列）。
      * 返回与 GET_ALL_CONSUMER_OFFSET 一致即可.
      */
     private RemotingCommand handleGetAllDelayOffset(RemotingCommand request) {
@@ -114,7 +114,7 @@ public class BrokerOutAPI implements NettyRemotingAbstract.NettyRequestProcessor
     }
 
     /**
-     * MVP: 订阅组配置暂未单独存储, 返回空 wrapper + 默认版本号.
+     * 订阅组配置尚未单独存储，返回空 wrapper + 默认版本号。
      */
     private RemotingCommand handleGetAllSubscriptionGroup(RemotingCommand request) {
         // 直接返回空 wrapper; 真实实现应返回 SubscriptionGroupWrapper
@@ -156,7 +156,7 @@ public class BrokerOutAPI implements NettyRemotingAbstract.NettyRequestProcessor
         Map<String, Map<Integer, Long>> result = new HashMap<>();
         for (String topic : mgr.getAllKnownTopics()) {
             Map<Integer, Long> perQueue = new HashMap<>();
-            // 简化: 遍历可能的 queueId (MVP 用 0-15)
+            // 遍历可能的 queueId（0-15）
             for (int q = 0; q < 16; q++) {
                 Map<String, Long> perGroup = mgr.queryOffsetByGroupAndQueue(topic, q);
                 if (!perGroup.isEmpty()) {

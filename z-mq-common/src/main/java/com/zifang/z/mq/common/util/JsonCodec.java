@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 简单的 JSON 编解码工具（对标 RocketMQ JsonUtil）.
  * <p>
- * 协议层 Body 使用，简化 JSON 序列化。
+ * 协议层 Body 使用，JSON 序列化。
  * <p>
  * 设计原则：放在 z-mq-common，使 broker / client / nameserver 都能引用，避免
  * 协议层 POJO 反向依赖 client 模块导致的循环依赖。

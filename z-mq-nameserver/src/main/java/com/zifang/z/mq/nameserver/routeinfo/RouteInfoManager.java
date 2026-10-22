@@ -48,6 +48,22 @@ public class RouteInfoManager {
     private final ConcurrentHashMap<String, BrokerLiveInfo> brokerLiveTable = new ConcurrentHashMap<>();
 
     /**
+     * 每个 broker <b>自己上报过</b>的 topic 名集合（BrokerName -> Set<Topic>）。
+     * <p>
+     * 用来区分两种"topic 不在 broker 的上报快照里"：
+     * <ul>
+     *   <li><b>这个 broker 上次上报过、这次不报了</b> ⇒ broker 上把 topic 删了 ⇒ 路由表里那条要删
+     *       （不然控制台列出来的是一条 0 队列的幽灵 topic）；</li>
+     *   <li><b>这个 broker 从来没上报过</b> ⇒ topic 是直接发给 NameServer 建的（本仓建 topic 的
+     *       正式通路，见 README「快速开始 3」：`ZmqAdmin createTopic` 发 5 号命令字给 NameServer），
+     *       broker 本来就不知道它 ⇒ <b>不能</b>因为"这次快照里没有"就把它删掉。</li>
+     * </ul>
+     * 第二个分支是本轮修的那处缺陷：broker 重启后 NameServer 把这类 topic 的路由删干净，
+     * 客户端一律报 "No route for topic"（ZmqE2ETest#testBrokerRestartAndRecover 等 6 支 E2E 红）。
+     */
+    private final HashMap<String, Set<String>> brokerReportedTopics = new HashMap<>();
+
+    /**
      * 扫描并移除不活跃的Broker
      */
     public void scanNotActiveBroker() {
@@ -114,23 +130,21 @@ public class RouteInfoManager {
                 // 从brokerLiveTable中移除
                 this.brokerLiveTable.remove(brokerAddrFound);
 
-                // 从topicQueueTable中移除
-                // 从topicQueueTable中移除
-                Iterator<Map.Entry<String, List<QueueData>>> topicQueueTableIt = this.topicQueueTable.entrySet().iterator();
-                while (topicQueueTableIt.hasNext()) {
-                    List<QueueData> queueDataList = topicQueueTableIt.next().getValue();
-                    // 使用显式循环避免lambda中的非final变量问题
-                    Iterator<QueueData> queueDataIt = queueDataList.iterator();
-                    while (queueDataIt.hasNext()) {
-                        QueueData queueData = queueDataIt.next();
-                        if (queueData.getBrokerName().equals(brokerNameFound)) {
-                            queueDataIt.remove();
-                        }
-                    }
-                    if (queueDataList.isEmpty()) {
-                        topicQueueTableIt.remove();
-                    }
-                }
+                // 【本轮改动】这里<b>不</b>再删 topicQueueTable 里属于这个 broker 的队列项。
+                //
+                // 为什么：topic 是【集群级事实】——本仓建 topic 的正式通路是给 NameServer 发 5 号命令字
+                // （README「快速开始 3」的 `ZmqAdmin createTopic`），broker 从头到尾不知道这个 topic。
+                // broker 掉线只意味着它的【地址】暂时没有，不意味着 topic 消失了。
+                //
+                // 删掉的实测后果（本轮修的就是它）：broker 一重启，NameServer 就把 topic 的队列项删干净，
+                // 客户端重新查路由得到 "topic not exist" ⇒ 报 "No route for topic"，
+                // 6 支 E2E 全红（ZmqE2ETest / FunctionalEdgeTest / StabilityTest / ChaosTest /
+                // PushOffsetCommitE2ETest / RetryDeadLetterE2ETest）。
+                // broker 重新注册后 brokerAddrTable 拿回地址，路由自动恢复。
+                //
+                // 代价（如实说明）：broker 永久下线时，它的 topic 仍留在路由表里，
+                // 但那条队列项解析不到任何 broker 地址 ⇒ 客户端拿到的是"有队列、没有 broker"，
+                // 报的仍是 "No route for topic"，不会误投到别处。
             }
         } finally {
             this.lock.writeLock().unlock();
@@ -270,36 +284,69 @@ public class RouteInfoManager {
     }
 
     /**
-     * 清掉某个 Broker 名下的全部 Topic 队列项，注册前调用。
+     * 按 broker 上报的<b>全量快照</b>同步它名下的 Topic 队列项，注册时调用。
      * <p>
-     * 注册只增不减：broker 上把 topic 删掉后再上报，{@link #registerTopic} 一条都不会进来，
-     * 旧的那条却一直留在表里。于是 Topic 删了、路由表里还在，控制台列出来的是一条
-     * 没有队列数的幽灵 topic，客户端也会一直往一个已经不存在的 topic 拉消息。
+     * 快照是全量的，所以"这个 broker 以前上报过、这次不报了"的 topic 要从路由表里删掉：
+     * 不删的话，broker 上把 topic 删了、路由表里还在，控制台列出来的是一条没有队列数的
+     * 幽灵 topic，客户端也会一直往一个已经不存在的 topic 拉消息。
      * <p>
-     * Broker 的注册报文是**全量快照**，所以先整体清掉再按新快照重填就是对的；
+     * 但"这个 broker <b>从来没上报过</b>"的 topic <b>不许</b>删（{@link #brokerReportedTopics} 记的就是这个差别）：
+     * 本仓建 topic 的正式通路是给 NameServer 发 5 号命令字（README「快速开始 3」），
+     * broker 本来就不知道这类 topic；照旧"先整体清掉再重填"的话，broker 一重启，
+     * 这类 topic 的路由就被清干净，客户端一律报 "No route for topic"。
+     * <p>
      * 只动属于该 broker 的 QueueData，别家 broker 服务同一个 topic 时不受影响。
+     *
+     * @param brokerName     broker 名
+     * @param topicConfigList 本次上报的 topic 配置全量快照（null / 空 = 这个 broker 这次没报任何 topic）
      */
-    public void unregisterTopicsOfBroker(final String brokerName) {
+    public void syncTopicsOfBroker(final String brokerName, final List<TopicConfig> topicConfigList) {
         if (brokerName == null) {
             return;
         }
         this.lock.writeLock().lock();
         try {
-            Iterator<Map.Entry<String, List<QueueData>>> it = this.topicQueueTable.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<String, List<QueueData>> entry = it.next();
-                List<QueueData> queues = entry.getValue();
-                if (queues == null) {
-                    it.remove();
-                    continue;
+            Set<String> snapshot = new HashSet<>();
+            if (topicConfigList != null) {
+                for (TopicConfig tc : topicConfigList) {
+                    if (tc != null && tc.getTopicName() != null) {
+                        snapshot.add(tc.getTopicName());
+                    }
                 }
-                queues.removeIf(q -> brokerName.equals(q.getBrokerName()));
-                if (queues.isEmpty()) {
-                    it.remove();
+            }
+
+            // 只删"上次上报过、这次不报了"的 topic
+            Set<String> previous = this.brokerReportedTopics.get(brokerName);
+            if (previous != null) {
+                for (String removed : previous) {
+                    if (!snapshot.contains(removed)) {
+                        removeTopicOfBroker(removed, brokerName);
+                    }
+                }
+            }
+            this.brokerReportedTopics.put(brokerName, snapshot);
+
+            if (topicConfigList != null) {
+                for (TopicConfig tc : topicConfigList) {
+                    registerTopic(brokerName, tc);
                 }
             }
         } finally {
             this.lock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 删掉某个 topic 属于某个 broker 的那一条队列项；该 topic 没有别的 broker 了就整个删掉。
+     */
+    private void removeTopicOfBroker(final String topic, final String brokerName) {
+        List<QueueData> queues = this.topicQueueTable.get(topic);
+        if (queues == null) {
+            return;
+        }
+        queues.removeIf(q -> brokerName.equals(q.getBrokerName()));
+        if (queues.isEmpty()) {
+            this.topicQueueTable.remove(topic);
         }
     }
 
