@@ -1,4 +1,4 @@
-import { j as e, m as k, M as q } from "./MqApp-Dbd0l6tE.js";
+import { j as e, m as k, M as q } from "./MqApp-cgKWjDQZ.js";
 import { ReloadOutlined as v, HomeOutlined as I, DashboardOutlined as C, AppstoreOutlined as O } from "@ant-design/icons";
 import { useState as a, useEffect as u } from "react";
 import { Typography as x, Space as g, Button as S, Alert as z, Spin as w, Row as T, Col as h, Card as d, Statistic as j, Descriptions as b, Table as A, Tag as B } from "antd";
