@@ -1,9 +1,9 @@
-import Pe, { useState as v, useRef as Ie, useEffect as ne, useCallback as Y, useMemo as Oe } from "react";
-import { Routes as Ae, Route as ee, Navigate as Be } from "react-router-dom";
-import { Alert as y, Card as I, Descriptions as Q, Tag as h, Space as q, Button as z, Table as K, Row as he, Col as A, Statistic as B, Select as $e } from "antd";
-import { ReloadOutlined as oe } from "@ant-design/icons";
+import Ie, { useState as v, useRef as Ae, useEffect as te, useCallback as Y, useMemo as Re } from "react";
+import { Routes as Be, Route as H, Navigate as $e } from "react-router-dom";
+import { Alert as y, Card as I, Descriptions as Q, Tag as h, Space as z, Button as q, Table as he, Row as be, Col as A, Statistic as B, Select as Me } from "antd";
+import { ReloadOutlined as ne } from "@ant-design/icons";
 import $ from "@yuku123/z-frontend-common";
-import { PageHeader as le, EmptyState as se } from "@yuku123/z-frontend-common/ui";
+import { PageHeader as le, EmptyState as oe, ListTable as fe } from "@yuku123/z-frontend-common/ui";
 const U = {
   /** 自省：由 MqProxyController 自己应答，不经过 z-mq，所以内嵌全挂时它也必须能通 */
   instance: () => $.get("/mq/__instance"),
@@ -16,38 +16,38 @@ const U = {
   brokerDelayOffset: (e) => $.get("/mq/broker/delay-offset", { params: e ? { brokerName: e } : {} }),
   brokerSubscription: (e) => $.get("/mq/broker/subscription", { params: e ? { brokerName: e } : {} }),
   brokerDataVersion: (e) => $.get("/mq/broker/data-version", { params: e ? { brokerName: e } : {} })
-}, be = {
+}, xe = {
   0: "SUCCESS",
   1: "SYSTEM_ERROR",
   2: "SYSTEM_BUSY",
   3: "REQUEST_CODE_NOT_SUPPORTED",
   4: "TRANSACTION_FAILED"
 };
-function ar(e) {
+function lr(e) {
   return !!e && e.responseCode === 0;
 }
 function L(e) {
   var s;
   const t = (s = e == null ? void 0 : e.response) == null ? void 0 : s.data;
   if (t && typeof t == "object") {
-    const l = t.message || t.error;
-    if (l) return `${l}${t.hint ? ` — ${t.hint}` : ""}`;
-    if (t.remark) return `z-mq 返回 responseCode=${t.responseCode} (${be[t.responseCode] || "?"}) ${t.remark}`;
+    const i = t.message || t.error;
+    if (i) return `${i}${t.hint ? ` — ${t.hint}` : ""}`;
+    if (t.remark) return `z-mq 返回 responseCode=${t.responseCode} (${xe[t.responseCode] || "?"}) ${t.remark}`;
   }
   return typeof t == "string" && t.trim() ? t.slice(0, 300) : (e == null ? void 0 : e.message) || String(e);
 }
-function X(e) {
-  return !e || e.responseCode === 0 ? null : `上游返回 responseCode=${e.responseCode}（${be[e.responseCode] || "未知码"}）${e.remark ? `：${e.remark}` : ""}` + (e.responseCode === 3 ? ' —— 这个请求码在 z-mq 当前版本没注册，是"上游没实现"，不是"集群里没有"' : "");
+function K(e) {
+  return !e || e.responseCode === 0 ? null : `上游返回 responseCode=${e.responseCode}（${xe[e.responseCode] || "未知码"}）${e.remark ? `：${e.remark}` : ""}` + (e.responseCode === 3 ? ' —— 这个请求码在 z-mq 当前版本没注册，是"上游没实现"，不是"集群里没有"' : "");
 }
 function ir(e) {
   return !!(e && (e.attributionUnverified || e.attributionVerified === !1));
 }
-function lr(e) {
+function cr(e) {
   var s;
   const t = (s = e == null ? void 0 : e.response) == null ? void 0 : s.status;
   return t === 503 || t === 502 ? !0 : /没有任何监听者|不是本 JVM|Address already in use|not bound|Connect/.test(String(L(e)));
 }
-const Me = {
+const qe = {
   "broker/subscription": "BrokerOutAPI.handleGetAllSubscriptionGroup 的源码注释写着「MVP: 订阅组配置暂未单独存储, 返回空 wrapper + 默认版本号」，而且它实际 new 出来的是一个空的 ConsumerOffsetSerializeWrapper（body 里连 subscription 字段都没有）⇒ 这张表恒空，不代表集群里没有订阅组",
   "broker/delay-offset": "源码注释「MVP: 延迟消息 offset 与 Topic 自身 offset 共享 (无 SCHEDULE_TOPIC_XXXX 隔离队列)。返回与 GET_ALL_CONSUMER_OFFSET 一致即可」⇒ 这一格的 offsetTable 和 321 那份是同一份数据，只有 dataVersion 不同",
   "broker/consumer-offset": 'collectOffsetTable 的注释「简化: 遍历可能的 queueId (MVP 用 0-15)」且取的是各 group 的 max ⇒ 显示的是"该 topic 前 16 个队列里出现过的最大 offset"，不是某个消费组的真实位点'
@@ -57,13 +57,13 @@ function ze(e) {
   const t = String(e.remark || "");
   return /not exist/i.test(t) ? t : null;
 }
-function Ee(e) {
+function Se(e) {
   if (!e || typeof e != "object") return "—";
   const t = e.counter ?? e.counterValue, s = e.timestamp ? new Date(e.timestamp).toLocaleString("zh-CN", { hour12: !1 }) : "-";
   return `counter=${t ?? "?"} · timestamp=${s}`;
 }
-const cr = /^[A-Za-z0-9_\-.:;%#]{1,120}$/;
-var ie = { exports: {} }, re = {};
+const dr = /^[A-Za-z0-9_\-.:;%#]{1,120}$/;
+var ae = { exports: {} }, ee = {};
 /**
  * @license React
  * react-jsx-runtime.production.js
@@ -73,12 +73,12 @@ var ie = { exports: {} }, re = {};
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-var Te;
-function qe() {
-  if (Te) return re;
-  Te = 1;
+var we;
+function Le() {
+  if (we) return ee;
+  we = 1;
   var e = Symbol.for("react.transitional.element"), t = Symbol.for("react.fragment");
-  function s(l, o, u) {
+  function s(i, o, u) {
     var c = null;
     if (u !== void 0 && (c = "" + u), o.key !== void 0 && (c = "" + o.key), "key" in o) {
       u = {};
@@ -87,15 +87,15 @@ function qe() {
     } else u = o;
     return o = u.ref, {
       $$typeof: e,
-      type: l,
+      type: i,
       key: c,
       ref: o !== void 0 ? o : null,
       props: u
     };
   }
-  return re.Fragment = t, re.jsx = s, re.jsxs = s, re;
+  return ee.Fragment = t, ee.jsx = s, ee.jsxs = s, ee;
 }
-var te = {};
+var re = {};
 /**
  * @license React
  * react-jsx-runtime.development.js
@@ -105,20 +105,20 @@ var te = {};
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-var we;
-function Le() {
-  return we || (we = 1, process.env.NODE_ENV !== "production" && (function() {
+var Ce;
+function De() {
+  return Ce || (Ce = 1, process.env.NODE_ENV !== "production" && (function() {
     function e(n) {
       if (n == null) return null;
       if (typeof n == "function")
-        return n.$$typeof === H ? null : n.displayName || n.name || null;
+        return n.$$typeof === Z ? null : n.displayName || n.name || null;
       if (typeof n == "string") return n;
       switch (n) {
         case a:
           return "Fragment";
         case x:
           return "Profiler";
-        case i:
+        case l:
           return "StrictMode";
         case F:
           return "Suspense";
@@ -142,7 +142,7 @@ function Le() {
           case P:
             var d = n.render;
             return n = n.displayName, n || (n = d.displayName || d.name || "", n = n !== "" ? "ForwardRef(" + n + ")" : "ForwardRef"), n;
-          case ae:
+          case se:
             return d = n.displayName || null, d !== null ? d : e(n.type) || "Memo";
           case G:
             d = n._payload, n = n._init;
@@ -165,15 +165,15 @@ function Le() {
       }
       if (d) {
         d = console;
-        var g = d.error, S = typeof Symbol == "function" && Symbol.toStringTag && n[Symbol.toStringTag] || n.constructor.name || "Object";
+        var g = d.error, T = typeof Symbol == "function" && Symbol.toStringTag && n[Symbol.toStringTag] || n.constructor.name || "Object";
         return g.call(
           d,
           "The provided key is an unsupported type %s. This value must be coerced to a string before using it here.",
-          S
+          T
         ), t(n);
       }
     }
-    function l(n) {
+    function i(n) {
       if (n === a) return "<>";
       if (typeof n == "object" && n !== null && n.$$typeof === G)
         return "<...>";
@@ -185,14 +185,14 @@ function Le() {
       }
     }
     function o() {
-      var n = me.A;
+      var n = ue.A;
       return n === null ? null : n.getOwner();
     }
     function u() {
       return Error("react-stack-top-frame");
     }
     function c(n) {
-      if (ke.call(n, "key")) {
+      if (je.call(n, "key")) {
         var d = Object.getOwnPropertyDescriptor(n, "key").get;
         if (d && d.isReactWarning) return !1;
       }
@@ -200,7 +200,7 @@ function Le() {
     }
     function m(n, d) {
       function g() {
-        je || (je = !0, console.error(
+        ye || (ye = !0, console.error(
           "%s: `key` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://react.dev/link/special-props)",
           d
         ));
@@ -212,18 +212,18 @@ function Le() {
     }
     function b() {
       var n = e(this.type);
-      return ye[n] || (ye[n] = !0, console.error(
+      return ge[n] || (ge[n] = !0, console.error(
         "Accessing element.ref was removed in React 19. ref is now a regular prop. It will be removed from the JSX Element type in a future release."
       )), n = this.props.ref, n !== void 0 ? n : null;
     }
-    function T(n, d, g, S, V, M) {
+    function S(n, d, g, T, V, M) {
       var E = g.ref;
       return n = {
         $$typeof: f,
         type: n,
         key: d,
         props: g,
-        _owner: S
+        _owner: T
       }, (E !== void 0 ? E : null) !== null ? Object.defineProperty(n, "ref", {
         enumerable: !1,
         get: b
@@ -249,46 +249,46 @@ function Le() {
         value: M
       }), Object.freeze && (Object.freeze(n.props), Object.freeze(n)), n;
     }
-    function C(n, d, g, S, V, M) {
+    function C(n, d, g, T, V, M) {
       var E = d.children;
       if (E !== void 0)
-        if (S)
-          if (Re(E)) {
-            for (S = 0; S < E.length; S++)
-              O(E[S]);
+        if (T)
+          if (Ne(E)) {
+            for (T = 0; T < E.length; T++)
+              O(E[T]);
             Object.freeze && Object.freeze(E);
           } else
             console.error(
               "React.jsx: Static children should always be an array. You are likely explicitly calling React.jsxs or React.jsxDEV. Use the Babel transform instead."
             );
         else O(E);
-      if (ke.call(d, "key")) {
+      if (je.call(d, "key")) {
         E = e(n);
-        var W = Object.keys(d).filter(function(Ne) {
-          return Ne !== "key";
+        var W = Object.keys(d).filter(function(Pe) {
+          return Pe !== "key";
         });
-        S = 0 < W.length ? "{key: someKey, " + W.join(": ..., ") + ": ...}" : "{key: someKey}", Se[E + S] || (W = 0 < W.length ? "{" + W.join(": ..., ") + ": ...}" : "{}", console.error(
+        T = 0 < W.length ? "{key: someKey, " + W.join(": ..., ") + ": ...}" : "{key: someKey}", Ee[E + T] || (W = 0 < W.length ? "{" + W.join(": ..., ") + ": ...}" : "{}", console.error(
           `A props object containing a "key" prop is being spread into JSX:
   let props = %s;
   <%s {...props} />
 React keys must be passed directly to JSX without using spread:
   let props = %s;
   <%s key={someKey} {...props} />`,
-          S,
+          T,
           E,
           W,
           E
-        ), Se[E + S] = !0);
+        ), Ee[E + T] = !0);
       }
       if (E = null, g !== void 0 && (s(g), E = "" + g), c(d) && (s(d.key), E = "" + d.key), "key" in d) {
         g = {};
-        for (var fe in d)
-          fe !== "key" && (g[fe] = d[fe]);
+        for (var pe in d)
+          pe !== "key" && (g[pe] = d[pe]);
       } else g = d;
       return E && m(
         g,
         typeof n == "function" ? n.displayName || n.name || "Unknown" : n
-      ), T(
+      ), S(
         n,
         E,
         g,
@@ -303,7 +303,7 @@ React keys must be passed directly to JSX without using spread:
     function _(n) {
       return typeof n == "object" && n !== null && n.$$typeof === f;
     }
-    var p = Pe, f = Symbol.for("react.transitional.element"), D = Symbol.for("react.portal"), a = Symbol.for("react.fragment"), i = Symbol.for("react.strict_mode"), x = Symbol.for("react.profiler"), k = Symbol.for("react.consumer"), w = Symbol.for("react.context"), P = Symbol.for("react.forward_ref"), F = Symbol.for("react.suspense"), J = Symbol.for("react.suspense_list"), ae = Symbol.for("react.memo"), G = Symbol.for("react.lazy"), j = Symbol.for("react.activity"), R = Symbol.for("react.view_transition"), H = Symbol.for("react.client.reference"), me = p.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, ke = Object.prototype.hasOwnProperty, Re = Array.isArray, pe = console.createTask ? console.createTask : function() {
+    var p = Ie, f = Symbol.for("react.transitional.element"), D = Symbol.for("react.portal"), a = Symbol.for("react.fragment"), l = Symbol.for("react.strict_mode"), x = Symbol.for("react.profiler"), k = Symbol.for("react.consumer"), w = Symbol.for("react.context"), P = Symbol.for("react.forward_ref"), F = Symbol.for("react.suspense"), J = Symbol.for("react.suspense_list"), se = Symbol.for("react.memo"), G = Symbol.for("react.lazy"), j = Symbol.for("react.activity"), R = Symbol.for("react.view_transition"), Z = Symbol.for("react.client.reference"), ue = p.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, je = Object.prototype.hasOwnProperty, Ne = Array.isArray, me = console.createTask ? console.createTask : function() {
       return null;
     };
     p = {
@@ -311,73 +311,73 @@ React keys must be passed directly to JSX without using spread:
         return n();
       }
     };
-    var je, ye = {}, ge = p.react_stack_bottom_frame.bind(
+    var ye, ge = {}, ve = p.react_stack_bottom_frame.bind(
       p,
       u
-    )(), ve = pe(l(u)), Se = {};
-    te.Fragment = a, te.jsx = function(n, d, g) {
-      var S = 1e4 > me.recentlyCreatedOwnerStacks++;
-      if (S) {
+    )(), Te = me(i(u)), Ee = {};
+    re.Fragment = a, re.jsx = function(n, d, g) {
+      var T = 1e4 > ue.recentlyCreatedOwnerStacks++;
+      if (T) {
         var V = Error.stackTraceLimit;
         Error.stackTraceLimit = 10;
         var M = Error("react-stack-top-frame");
         Error.stackTraceLimit = V;
-      } else M = ge;
+      } else M = ve;
       return C(
         n,
         d,
         g,
         !1,
         M,
-        S ? pe(l(n)) : ve
+        T ? me(i(n)) : Te
       );
-    }, te.jsxs = function(n, d, g) {
-      var S = 1e4 > me.recentlyCreatedOwnerStacks++;
-      if (S) {
+    }, re.jsxs = function(n, d, g) {
+      var T = 1e4 > ue.recentlyCreatedOwnerStacks++;
+      if (T) {
         var V = Error.stackTraceLimit;
         Error.stackTraceLimit = 10;
         var M = Error("react-stack-top-frame");
         Error.stackTraceLimit = V;
-      } else M = ge;
+      } else M = ve;
       return C(
         n,
         d,
         g,
         !0,
         M,
-        S ? pe(l(n)) : ve
+        T ? me(i(n)) : Te
       );
     };
-  })()), te;
+  })()), re;
 }
-var Ce;
-function De() {
-  return Ce || (Ce = 1, process.env.NODE_ENV === "production" ? ie.exports = qe() : ie.exports = Le()), ie.exports;
+var _e;
+function Ve() {
+  return _e || (_e = 1, process.env.NODE_ENV === "production" ? ae.exports = Le() : ae.exports = De()), ae.exports;
 }
-var r = De();
-function ce() {
-  const [e, t] = v(null), [s, l] = v(!1), [o, u] = v(""), c = Ie(!0);
-  ne(() => () => {
+var r = Ve();
+function ie() {
+  const [e, t] = v(null), [s, i] = v(!1), [o, u] = v(""), c = Ae(!0);
+  te(() => () => {
     c.current = !1;
   }, []);
   const m = Y(async () => {
     try {
       const b = await U.instance();
       if (!c.current) return;
-      t(b), l(!1), u("");
+      t(b), i(!1), u("");
     } catch (b) {
       if (!c.current) return;
-      t(null), l(!0), u(L(b));
+      t(null), i(!0), u(L(b));
     }
   }, []);
   return { instance: e, instanceError: s, instanceErrorText: o, poll: m };
 }
-function de({ data: e }) {
+function ce({ data: e }) {
   if (!e) return null;
-  const { namesrvForeignListenerSuspected: t, brokerForeignListenerSuspected: s, namesrvPort: l, brokerPort: o } = e;
+  const { namesrvForeignListenerSuspected: t, brokerForeignListenerSuspected: s, namesrvPort: i, brokerPort: o } = e;
   if (!t && !s) return null;
   const u = [
-    t ? `NameServer :${l}（属主 PID ${e.namesrvPortOwnerPid}，我的子进程 PID ${e.namesrvChildPid}）` : null,
+    t ? `NameServer :${i}（属主 PID ${e.namesrvPortOwnerPid}，我的子进程 PID ${e.namesrvChildPid}）` : null,
     s ? `Broker :${o}（属主 PID ${e.brokerPortOwnerPid}，我的子进程 PID ${e.brokerChildPid}）` : null
   ].filter(Boolean).join("；");
   return /* @__PURE__ */ r.jsx(
@@ -388,11 +388,11 @@ function de({ data: e }) {
       style: { marginBottom: 16 },
       message: "有端口在应答，但应答者不是本次构建 spawn 的子进程 —— 下面所有表格都不算孵化结果",
       description: `外来嫌疑：${u}。` + (e.bindError ? ` 本 JVM 的子进程 bind 失败原文：${e.bindError}` : " 本 JVM 的子进程没有 bind 成功的记录。") + // 端口取实例自省回来的实际值：写死 9876/10911 会在换端口后把人指到别的进程上
-      ` 处理方式只有两种：让出 ${l}/${o}，或给 zmq.namesrv-port / zmq.broker-port 换端口。 代理层不会替你去占端口，也不会去 kill 别人的进程。`
+      ` 处理方式只有两种：让出 ${i}/${o}，或给 zmq.namesrv-port / zmq.broker-port 换端口。 代理层不会替你去占端口，也不会去 kill 别人的进程。`
     }
   );
 }
-function Z({ res: e }) {
+function X({ res: e }) {
   return !e || !(e.attributionUnverified || e.attributionVerified === !1) ? null : /* @__PURE__ */ r.jsx(
     y,
     {
@@ -404,7 +404,7 @@ function Z({ res: e }) {
     }
   );
 }
-function ue({ data: e }) {
+function de({ data: e }) {
   if (!e) return null;
   const t = [
     e.namesrvChildAlive && !e.namesrvPortOwnedByMyChild ? `NameServer pid=${e.namesrvChildPid}` : null,
@@ -421,7 +421,7 @@ function ue({ data: e }) {
     }
   ) : null;
 }
-function xe({ data: e }) {
+function ke({ data: e }) {
   return !e || e.attributionAvailable !== !1 ? null : /* @__PURE__ */ r.jsx(
     y,
     {
@@ -433,7 +433,7 @@ function xe({ data: e }) {
     }
   );
 }
-function Ve(e) {
+function Ue(e) {
   if (!e) return "-";
   try {
     return new Date(e).toLocaleString("zh-CN", { hour12: !1 });
@@ -441,32 +441,32 @@ function Ve(e) {
     return String(e);
   }
 }
-function Ue(e) {
+function Fe(e) {
   if (e == null) return "-";
   const t = Math.max(0, Math.floor((Date.now() - e) / 1e3));
   return t < 60 ? `${t} 秒前` : t < 3600 ? `${Math.floor(t / 60)} 分前` : t < 86400 ? `${Math.floor(t / 3600)} 时前` : `${Math.floor(t / 86400)} 天前`;
 }
-function N(e, t = "是", s = "否", l = "error") {
-  return e == null ? /* @__PURE__ */ r.jsx(h, { children: "未知" }) : e ? /* @__PURE__ */ r.jsx(h, { color: "success", children: t }) : /* @__PURE__ */ r.jsx(h, { color: l, children: s });
+function N(e, t = "是", s = "否", i = "error") {
+  return e == null ? /* @__PURE__ */ r.jsx(h, { children: "未知" }) : e ? /* @__PURE__ */ r.jsx(h, { color: "success", children: t }) : /* @__PURE__ */ r.jsx(h, { color: i, children: s });
 }
-const Fe = [
+const Ye = [
   { title: "逻辑端点", dataIndex: "ep", key: "ep", width: 240, render: (e) => /* @__PURE__ */ r.jsx("code", { children: e }) },
   { title: "请求码", dataIndex: "code", key: "code", width: 100, render: (e) => /* @__PURE__ */ r.jsx(h, { children: e }) },
   { title: "常量名", dataIndex: "name", key: "name", render: (e) => /* @__PURE__ */ r.jsx("code", { children: e }) }
 ];
-function Ye() {
+function Je() {
   var _;
-  const { instance: e, instanceError: t, instanceErrorText: s, poll: l } = ce(), [o, u] = v(null), [c, m] = v(null), [b, T] = v(!1), C = Y(async (p) => {
-    T(!0);
+  const { instance: e, instanceError: t, instanceErrorText: s, poll: i } = ie(), [o, u] = v(null), [c, m] = v(null), [b, S] = v(!1), C = Y(async (p) => {
+    S(!0);
     try {
       const f = await U[p]();
       u({ which: p, res: f }), m(null);
     } catch (f) {
       u(null), m(f);
     } finally {
-      T(!1), l();
+      S(!1), i();
     }
-  }, [l]), O = e ? Object.entries(e.readOnlyRequestCodes || {}).map(([p, f]) => ({
+  }, [i]), O = e ? Object.entries(e.readOnlyRequestCodes || {}).map(([p, f]) => ({
     ep: p,
     code: f,
     name: (e.requestCodeNames || {})[String(f)] || "-",
@@ -480,9 +480,9 @@ function Ye() {
         subtitle: "自省接口 GET /api/mq/__instance（由 MqProxyController 自己应答，不经过 z-mq）+ 只读请求码实发探针"
       }
     ),
-    /* @__PURE__ */ r.jsx(I, { extra: /* @__PURE__ */ r.jsxs(q, { children: [
-      /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(oe, {}), loading: b, onClick: () => C("cluster"), children: "实发一发 码4 GET_BROKER_CLUSTER_INFO" }),
-      /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(oe, {}), onClick: l, children: "刷新自省" })
+    /* @__PURE__ */ r.jsx(I, { extra: /* @__PURE__ */ r.jsxs(z, { children: [
+      /* @__PURE__ */ r.jsx(q, { icon: /* @__PURE__ */ r.jsx(ne, {}), loading: b, onClick: () => C("cluster"), children: "实发一发 码4 GET_BROKER_CLUSTER_INFO" }),
+      /* @__PURE__ */ r.jsx(q, { icon: /* @__PURE__ */ r.jsx(ne, {}), onClick: i, children: "刷新自省" })
     ] }), children: t ? /* @__PURE__ */ r.jsx(
       y,
       {
@@ -492,9 +492,9 @@ function Ye() {
         description: "/api/mq/__instance 不碰 NameServer 也不碰 Broker，由 z-opc 自己的 controller 直接应答；它都不通说明是 z-opc 侧的路由/认证问题（302 到登录页 = 没带会话 Cookie；404 = MainWebConfig.spaPaths 或 /api/mq 映射没接上）。"
       }
     ) : /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
-      /* @__PURE__ */ r.jsx(xe, { data: e }),
+      /* @__PURE__ */ r.jsx(ke, { data: e }),
+      /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
-      /* @__PURE__ */ r.jsx(ue, { data: e }),
       e && !e.embeddedConfigLoaded && /* @__PURE__ */ r.jsx(
         y,
         {
@@ -583,7 +583,7 @@ function Ye() {
             {
               key: "reach",
               label: "两个端口此刻 TCP 可连",
-              children: e ? /* @__PURE__ */ r.jsxs(q, { children: [
+              children: e ? /* @__PURE__ */ r.jsxs(z, { children: [
                 N(e.namesrvPortReachable, `:${e.namesrvPort} 通`, `:${e.namesrvPort} 不通`, "warning"),
                 N(e.brokerPortReachable, `:${e.brokerPort} 通`, `:${e.brokerPort} 不通`, "warning")
               ] }) : "-"
@@ -629,7 +629,7 @@ function Ye() {
                     " ",
                     f.exists ? /* @__PURE__ */ r.jsxs("span", { style: { color: "#94a3b8" }, children: [
                       "（",
-                      Ue(f.lastModified),
+                      Fe(f.lastModified),
                       "写入）"
                     ] }) : null
                   ] }),
@@ -646,12 +646,12 @@ function Ye() {
         ) : /* @__PURE__ */ r.jsx(y, { type: "info", showIcon: !0, message: "自省接口没通，读不到日志字段" })
       }
     ),
-    /* @__PURE__ */ r.jsx(I, { title: "实发一发只读请求码（证明协议适配器本身成立，而不只是在报自省）", style: { marginTop: 16 }, children: /* @__PURE__ */ r.jsxs(q, { direction: "vertical", style: { width: "100%" }, children: [
-      /* @__PURE__ */ r.jsxs(q, { wrap: !0, children: [
-        /* @__PURE__ */ r.jsx(z, { size: "small", loading: b, onClick: () => C("cluster"), children: "码 4 · 集群注册表" }),
-        /* @__PURE__ */ r.jsx(z, { size: "small", loading: b, onClick: () => C("topics"), children: "码 8 · NameServer topic 列表" }),
-        /* @__PURE__ */ r.jsx(z, { size: "small", loading: b, onClick: () => C("brokerTopics"), children: "Broker 码 8 · 本 broker topic" }),
-        /* @__PURE__ */ r.jsx(z, { size: "small", loading: b, onClick: () => C("brokerDataVersion"), children: "Broker 码 324 · DataVersion" })
+    /* @__PURE__ */ r.jsx(I, { title: "实发一发只读请求码（证明协议适配器本身成立，而不只是在报自省）", style: { marginTop: 16 }, children: /* @__PURE__ */ r.jsxs(z, { direction: "vertical", style: { width: "100%" }, children: [
+      /* @__PURE__ */ r.jsxs(z, { wrap: !0, children: [
+        /* @__PURE__ */ r.jsx(q, { size: "small", loading: b, onClick: () => C("cluster"), children: "码 4 · 集群注册表" }),
+        /* @__PURE__ */ r.jsx(q, { size: "small", loading: b, onClick: () => C("topics"), children: "码 8 · NameServer topic 列表" }),
+        /* @__PURE__ */ r.jsx(q, { size: "small", loading: b, onClick: () => C("brokerTopics"), children: "Broker 码 8 · 本 broker topic" }),
+        /* @__PURE__ */ r.jsx(q, { size: "small", loading: b, onClick: () => C("brokerDataVersion"), children: "Broker 码 324 · DataVersion" })
       ] }),
       c && /* @__PURE__ */ r.jsx(
         y,
@@ -662,7 +662,7 @@ function Ye() {
         }
       ),
       o && /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
-        /* @__PURE__ */ r.jsx(Z, { res: o.res }),
+        /* @__PURE__ */ r.jsx(X, { res: o.res }),
         /* @__PURE__ */ r.jsx(
           Q,
           {
@@ -683,7 +683,7 @@ function Ye() {
                 children: /* @__PURE__ */ r.jsxs(h, { color: o.res.responseCode === 0 ? "success" : "error", children: [
                   o.res.responseCode,
                   " · ",
-                  be[o.res.responseCode] || "未知码"
+                  xe[o.res.responseCode] || "未知码"
                 ] })
               },
               { key: "remark", label: "remark", children: o.res.remark || /* @__PURE__ */ r.jsx("span", { style: { color: "#94a3b8" }, children: "—" }) },
@@ -693,7 +693,7 @@ function Ye() {
               {
                 key: "ts",
                 label: "本页数据读取时刻",
-                children: Ve(Date.now())
+                children: Ue(Date.now())
               }
             ]
           }
@@ -721,12 +721,12 @@ function Ye() {
     ] }) }),
     /* @__PURE__ */ r.jsxs(I, { title: "本代理可达的只读请求码（穷举，无通用转发口）", style: { marginTop: 16 }, children: [
       /* @__PURE__ */ r.jsx(
-        K,
+        he,
         {
           size: "small",
           rowKey: "ep",
           dataSource: O,
-          columns: Fe,
+          columns: Ye,
           pagination: !1
         }
       ),
@@ -748,7 +748,7 @@ function Ye() {
     ] })
   ] });
 }
-const Je = [
+const Ge = [
   {
     title: "Broker 名",
     dataIndex: "brokerName",
@@ -768,7 +768,7 @@ const Je = [
     title: "全部副本 (id → addr)",
     dataIndex: "replicas",
     key: "replicas",
-    render: (e) => e.length ? /* @__PURE__ */ r.jsx(q, { direction: "vertical", size: 0, children: e.map((t) => /* @__PURE__ */ r.jsxs("span", { children: [
+    render: (e) => e.length ? /* @__PURE__ */ r.jsx(z, { direction: "vertical", size: 0, children: e.map((t) => /* @__PURE__ */ r.jsxs("span", { children: [
       /* @__PURE__ */ r.jsxs(h, { color: t.id === "0" ? "blue" : "default", children: [
         "id=",
         t.id
@@ -792,28 +792,28 @@ const Je = [
     ] }) : /* @__PURE__ */ r.jsx(h, { children: "无地址" })
   }
 ];
-function Ge() {
-  const { instance: e, poll: t } = ce(), [s, l] = v(null), [o, u] = v(null), [c, m] = v(!1), b = Y(async () => {
+function We() {
+  const { instance: e, poll: t } = ie(), [s, i] = v(null), [o, u] = v(null), [c, m] = v(!1), b = Y(async () => {
     m(!0);
     try {
       const a = await U.cluster();
-      l(a), u(null);
+      i(a), u(null);
     } catch (a) {
-      l(null), u(a);
+      i(null), u(a);
     } finally {
       m(!1);
     }
   }, []);
-  ne(() => {
+  te(() => {
     b(), t();
   }, [b, t]);
-  const T = (s == null ? void 0 : s.data) || {}, C = T.brokerAddrTable && typeof T.brokerAddrTable == "object" ? T.brokerAddrTable : {}, O = T.clusterAddrTable && typeof T.clusterAddrTable == "object" ? T.clusterAddrTable : {}, _ = (e == null ? void 0 : e.brokerPort) ?? null, p = Object.keys(C).map((a) => {
+  const S = (s == null ? void 0 : s.data) || {}, C = S.brokerAddrTable && typeof S.brokerAddrTable == "object" ? S.brokerAddrTable : {}, O = S.clusterAddrTable && typeof S.clusterAddrTable == "object" ? S.clusterAddrTable : {}, _ = (e == null ? void 0 : e.brokerPort) ?? null, p = Object.keys(C).map((a) => {
     var F;
-    const i = C[a] || {}, x = i.brokerAddrs && typeof i.brokerAddrs == "object" ? i.brokerAddrs : {}, k = Object.keys(x).map((J) => ({ id: J, addr: String(x[J]) })), w = x[0] ? String(x[0]) : ((F = k[0]) == null ? void 0 : F.addr) || null, P = w ? Number(w.split(":").pop()) : null;
+    const l = C[a] || {}, x = l.brokerAddrs && typeof l.brokerAddrs == "object" ? l.brokerAddrs : {}, k = Object.keys(x).map((J) => ({ id: J, addr: String(x[J]) })), w = x[0] ? String(x[0]) : ((F = k[0]) == null ? void 0 : F.addr) || null, P = w ? Number(w.split(":").pop()) : null;
     return {
       key: a,
-      brokerName: i.brokerName || a,
-      cluster: i.cluster,
+      brokerName: l.brokerName || a,
+      cluster: l.cluster,
       masterAddr: w,
       replicas: k,
       port: P,
@@ -824,7 +824,7 @@ function Ge() {
     key: a,
     cluster: a,
     members: (Array.isArray(O[a]) ? O[a] : []).map(String)
-  })), D = s && !o ? X(s) : null;
+  })), D = s && !o ? K(s) : null;
   return /* @__PURE__ */ r.jsxs("div", { children: [
     /* @__PURE__ */ r.jsx(
       le,
@@ -833,11 +833,11 @@ function Ge() {
         subtitle: "NameServer 码 4 GET_BROKER_CLUSTER_INFO → brokerAddrTable / clusterAddrTable"
       }
     ),
-    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsx(q, { children: /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(oe, {}), loading: c, onClick: () => {
+    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsx(z, { children: /* @__PURE__ */ r.jsx(q, { icon: /* @__PURE__ */ r.jsx(ne, {}), loading: c, onClick: () => {
       b(), t();
     }, children: "刷新" }) }), children: [
+      /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
-      /* @__PURE__ */ r.jsx(ue, { data: e }),
       o && /* @__PURE__ */ r.jsx(
         y,
         {
@@ -849,32 +849,32 @@ function Ge() {
       ),
       D && /* @__PURE__ */ r.jsx(y, { type: "warning", showIcon: !0, style: { marginBottom: 12 }, message: D }),
       s && !o && /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
-        /* @__PURE__ */ r.jsx(Z, { res: s }),
-        /* @__PURE__ */ r.jsxs(he, { gutter: 16, style: { marginBottom: 12 }, children: [
+        /* @__PURE__ */ r.jsx(X, { res: s }),
+        /* @__PURE__ */ r.jsxs(be, { gutter: 16, style: { marginBottom: 12 }, children: [
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "已注册 Broker 数", value: p.length }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "Cluster 数", value: f.length }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "请求码", value: `${s.requestCode || "-"} ${s.requestName || ""}` }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "往返耗时", value: s.elapsedMs ?? "-", suffix: "ms" }) })
         ] }),
         p.length === 0 ? /* @__PURE__ */ r.jsx(
-          se,
+          oe,
           {
             title: "brokerAddrTable 是空的",
             description: "没有任何 broker 向这台 NameServer 发过 REGISTER_BROKER（码 1）。两种成因要分开：① broker 子进程没起 / 没 bind 上（看顶部红条与「实例与端口」页的 bind 原文）；② broker 起了但配的 zmq.namesrv-addr 指向的是另一台 NameServer。本页不给「注册 broker」按钮 —— 那是写面，另立卡。"
           }
         ) : /* @__PURE__ */ r.jsx(
-          K,
+          he,
           {
             size: "small",
             rowKey: "key",
             loading: c,
             dataSource: p,
-            columns: Je,
+            columns: Ge,
             pagination: !1
           }
         )
       ] }),
-      !s && !o && /* @__PURE__ */ r.jsx(se, { title: "还没读到数据", description: "刷新以发送一次只读请求码 4。" })
+      !s && !o && /* @__PURE__ */ r.jsx(oe, { title: "还没读到数据", description: "刷新以发送一次只读请求码 4。" })
     ] }),
     f.length > 0 && /* @__PURE__ */ r.jsx(I, { title: "Cluster → Broker 归属", style: { marginTop: 16 }, children: /* @__PURE__ */ r.jsx(
       Q,
@@ -885,7 +885,7 @@ function Ge() {
         items: f.map((a) => ({
           key: a.key,
           label: a.cluster,
-          children: /* @__PURE__ */ r.jsx(q, { wrap: !0, children: a.members.map((i) => /* @__PURE__ */ r.jsx(h, { children: i }, i)) })
+          children: /* @__PURE__ */ r.jsx(z, { wrap: !0, children: a.members.map((l) => /* @__PURE__ */ r.jsx(h, { children: l }, l)) })
         }))
       }
     ) }),
@@ -914,7 +914,7 @@ function Ge() {
     ] }) })
   ] });
 }
-const We = [
+const Qe = [
   {
     title: "Topic",
     dataIndex: "topic",
@@ -942,19 +942,19 @@ const We = [
     render: (e, t) => t.onNamesrv && t.onBroker ? /* @__PURE__ */ r.jsx(h, { color: "success", children: "两侧一致" }) : /* @__PURE__ */ r.jsx(h, { color: "warning", children: t.onNamesrv ? "只在 NameServer（疑似残留注册）" : "只在 Broker（未向 NameServer 注册）" })
   }
 ];
-function Qe() {
-  var ae, G;
-  const { instance: e, poll: t } = ce(), [s, l] = v(null), [o, u] = v(null), [c, m] = v(null), [b, T] = v(null), [C, O] = v(!1), [_, p] = v({}), f = Y(async () => {
-    O(!0), m(null), T(null), await Promise.all([
-      U.topics().then(l).catch((j) => {
-        l(null), m(j);
+function Ke() {
+  var se, G;
+  const { instance: e, poll: t } = ie(), [s, i] = v(null), [o, u] = v(null), [c, m] = v(null), [b, S] = v(null), [C, O] = v(!1), [_, p] = v({}), f = Y(async () => {
+    O(!0), m(null), S(null), await Promise.all([
+      U.topics().then(i).catch((j) => {
+        i(null), m(j);
       }),
       U.brokerTopics().then(u).catch((j) => {
-        u(null), T(j);
+        u(null), S(j);
       })
     ]), O(!1), t();
   }, [t]);
-  ne(() => {
+  te(() => {
     f();
   }, [f]);
   const D = Y(async (j) => {
@@ -962,21 +962,21 @@ function Qe() {
       p((R) => ({ ...R, [j]: { loading: !0 } }));
       try {
         const R = await U.route(j);
-        p((H) => ({ ...H, [j]: R }));
+        p((Z) => ({ ...Z, [j]: R }));
       } catch (R) {
-        p((H) => ({ ...H, [j]: { loadError: L(R) } }));
+        p((Z) => ({ ...Z, [j]: { loadError: L(R) } }));
       }
     }
-  }, [_]), a = s && s.responseCode === 0 && Array.isArray((ae = s.data) == null ? void 0 : ae.topics) ? s.data.topics.map(String) : null, i = o && o.responseCode === 0 && Array.isArray((G = o.data) == null ? void 0 : G.topics) ? o.data.topics.map(String) : null, x = Oe(() => {
-    const j = /* @__PURE__ */ new Set([...a || [], ...i || []]);
+  }, [_]), a = s && s.responseCode === 0 && Array.isArray((se = s.data) == null ? void 0 : se.topics) ? s.data.topics.map(String) : null, l = o && o.responseCode === 0 && Array.isArray((G = o.data) == null ? void 0 : G.topics) ? o.data.topics.map(String) : null, x = Re(() => {
+    const j = /* @__PURE__ */ new Set([...a || [], ...l || []]);
     return Array.from(j).sort().map((R) => ({
       key: R,
       topic: R,
       onNamesrv: a ? a.includes(R) : !1,
-      onBroker: i ? i.includes(R) : !1,
-      brokerUnavailable: !i
+      onBroker: l ? l.includes(R) : !1,
+      brokerUnavailable: !l
     }));
-  }, [a, i]), k = x.filter((j) => j.onNamesrv && !j.onBroker).length, w = x.filter((j) => !j.onNamesrv && j.onBroker).length, P = s && !c ? X(s) : null, F = o && !b ? X(o) : null, J = !a && !i;
+  }, [a, l]), k = x.filter((j) => j.onNamesrv && !j.onBroker).length, w = x.filter((j) => !j.onNamesrv && j.onBroker).length, P = s && !c ? K(s) : null, F = o && !b ? K(o) : null, J = !a && !l;
   return /* @__PURE__ */ r.jsxs("div", { children: [
     /* @__PURE__ */ r.jsx(
       le,
@@ -985,10 +985,10 @@ function Qe() {
         subtitle: "NameServer 码 8 GET_ALL_TOPIC_LIST ∥ Broker 码 8 GET_ALL_TOPIC_LIST → 差集 + 按需码 3 路由详情"
       }
     ),
-    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsx(q, { children: /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(oe, {}), loading: C, onClick: f, children: "刷新" }) }), children: [
+    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsx(z, { children: /* @__PURE__ */ r.jsx(q, { icon: /* @__PURE__ */ r.jsx(ne, {}), loading: C, onClick: f, children: "刷新" }) }), children: [
+      /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
-      /* @__PURE__ */ r.jsx(ue, { data: e }),
-      /* @__PURE__ */ r.jsx(xe, { data: e }),
+      /* @__PURE__ */ r.jsx(ke, { data: e }),
       c && /* @__PURE__ */ r.jsx(
         y,
         {
@@ -1010,50 +1010,57 @@ function Qe() {
       ),
       P && /* @__PURE__ */ r.jsx(y, { type: "warning", showIcon: !0, style: { marginBottom: 12 }, message: `NameServer：${P}` }),
       F && /* @__PURE__ */ r.jsx(y, { type: "warning", showIcon: !0, style: { marginBottom: 12 }, message: `Broker：${F}` }),
-      s && !c && /* @__PURE__ */ r.jsx(Z, { res: s }),
-      o && !b && /* @__PURE__ */ r.jsx(Z, { res: o }),
-      /* @__PURE__ */ r.jsxs(he, { gutter: 16, style: { marginBottom: 12 }, children: [
+      s && !c && /* @__PURE__ */ r.jsx(X, { res: s }),
+      o && !b && /* @__PURE__ */ r.jsx(X, { res: o }),
+      /* @__PURE__ */ r.jsxs(be, { gutter: 16, style: { marginBottom: 12 }, children: [
         /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "NameServer 侧 topic 数", value: a ? a.length : "—" }) }),
-        /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "Broker 侧 topic 数", value: i ? i.length : "—" }) }),
+        /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(B, { title: "Broker 侧 topic 数", value: l ? l.length : "—" }) }),
         /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(
           B,
           {
             title: "只在 NameServer",
-            value: i ? k : "—",
-            valueStyle: k && i ? { color: "#b45309" } : void 0
+            value: l ? k : "—",
+            valueStyle: k && l ? { color: "#b45309" } : void 0
           }
         ) }),
         /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(
           B,
           {
             title: "只在 Broker",
-            value: i ? w : "—",
-            valueStyle: w && i ? { color: "#b45309" } : void 0
+            value: l ? w : "—",
+            valueStyle: w && l ? { color: "#b45309" } : void 0
           }
         ) })
       ] }),
       J ? /* @__PURE__ */ r.jsx(
-        se,
+        oe,
         {
           title: "两侧都没取到 topic 列表",
           description: "这不是「集群里没有 topic」的证据：上面任一档报错、或上游回了非 0 业务码（HTTP 仍是 200），都到这里显示为取不到。先读上面的红/黄条定性，再决定要不要怀疑数据。"
         }
-      ) : /* @__PURE__ */ r.jsx(
-        K,
-        {
-          size: "small",
-          rowKey: "key",
-          loading: C,
-          dataSource: x,
-          columns: We,
-          pagination: { pageSize: 20, hideOnSinglePage: !0 },
-          expandable: {
-            onExpand: (j, R) => {
-              j && D(R.topic);
-            },
-            expandedRowRender: (j) => /* @__PURE__ */ r.jsx(Ke, { state: _[j.topic] })
+      ) : (
+        /* 列表页走基座 ListTable（lead 008 §2 规则 2/3/4）：分页 / 过滤 / EmptyState 三件套。
+           外层 Card 已经给了边框与内边距（里面还有横幅/告警/统计条），
+           所以基座 Card 设成无边框，避免两层卡片套在一起。
+           展开行（码 3 路由详情）仍由 antd Table 的 expandable 处理。 */
+        /* @__PURE__ */ r.jsx(
+          fe,
+          {
+            rows: x,
+            columns: Qe,
+            rowKey: "key",
+            loading: C,
+            searchKeys: "topic",
+            searchPlaceholder: "按 topic 名过滤",
+            cardProps: { variant: "borderless", styles: { body: { padding: 0 } } },
+            expandable: {
+              onExpand: (j, R) => {
+                j && D(R.topic);
+              },
+              expandedRowRender: (j) => /* @__PURE__ */ r.jsx(Xe, { state: _[j.topic] })
+            }
           }
-        }
+        )
       )
     ] }),
     /* @__PURE__ */ r.jsx(I, { title: "这一页的两个语义坑", style: { marginTop: 16 }, children: /* @__PURE__ */ r.jsxs("div", { style: { color: "#64748b", fontSize: 12, lineHeight: 1.9 }, children: [
@@ -1072,12 +1079,12 @@ function Qe() {
     ] }) })
   ] });
 }
-function Ke({ state: e }) {
+function Xe({ state: e }) {
   var u, c;
   if (!e) return /* @__PURE__ */ r.jsx("span", { style: { color: "#94a3b8", fontSize: 12 }, children: "展开时向 NameServer 发送码 3 GET_ROUTEINFO_BY_TOPIC。" });
   if (e.loading) return /* @__PURE__ */ r.jsx("span", { style: { color: "#94a3b8", fontSize: 12 }, children: "查询中…" });
   if (e.loadError) return /* @__PURE__ */ r.jsx(y, { type: "error", showIcon: !0, message: `路由查询失败：${e.loadError}` });
-  const t = ze(e), s = X(e), l = Array.isArray((u = e.data) == null ? void 0 : u.queueDatas) ? e.data.queueDatas : [], o = Array.isArray((c = e.data) == null ? void 0 : c.brokerDatas) ? e.data.brokerDatas : [];
+  const t = ze(e), s = K(e), i = Array.isArray((u = e.data) == null ? void 0 : u.queueDatas) ? e.data.queueDatas : [], o = Array.isArray((c = e.data) == null ? void 0 : c.brokerDatas) ? e.data.brokerDatas : [];
   return /* @__PURE__ */ r.jsxs("div", { children: [
     t && /* @__PURE__ */ r.jsx(
       y,
@@ -1090,7 +1097,7 @@ function Ke({ state: e }) {
       }
     ),
     !t && s && /* @__PURE__ */ r.jsx(y, { type: "error", showIcon: !0, style: { marginBottom: 8 }, message: s }),
-    e.data && /* @__PURE__ */ r.jsx(Z, { res: e }),
+    e.data && /* @__PURE__ */ r.jsx(X, { res: e }),
     e.data && /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
       /* @__PURE__ */ r.jsx(
         Q,
@@ -1107,11 +1114,11 @@ function Ke({ state: e }) {
         }
       ),
       /* @__PURE__ */ r.jsx(
-        K,
+        he,
         {
           size: "small",
           rowKey: (m) => `${m.brokerName}-${m.queueId ?? ""}`,
-          dataSource: l,
+          dataSource: i,
           pagination: !1,
           columns: [
             { title: "Broker", dataIndex: "brokerName", key: "brokerName", render: (m) => /* @__PURE__ */ r.jsx("code", { children: m }) },
@@ -1129,13 +1136,13 @@ function Ke({ state: e }) {
     ] })
   ] });
 }
-const _e = [
+const Oe = [
   { key: "topicConfig", path: "broker/topic-config", label: "Topic 配置（码 320）", api: "brokerTopicConfig" },
   { key: "consumerOffset", path: "broker/consumer-offset", label: "消费位点（码 321）", api: "brokerConsumerOffset" },
   { key: "delayOffset", path: "broker/delay-offset", label: "延迟位点（码 322）", api: "brokerDelayOffset" },
   { key: "subscription", path: "broker/subscription", label: "订阅组（码 323）", api: "brokerSubscription" },
   { key: "dataVersion", path: "broker/data-version", label: "DataVersion（码 324）", api: "brokerDataVersion" }
-], Xe = [
+], Ze = [
   { title: "Topic", dataIndex: "topic", key: "topic", render: (e) => /* @__PURE__ */ r.jsx("code", { children: e }) },
   { title: "readQueueNums", dataIndex: "readQueueNums", key: "readQueueNums", width: 130 },
   { title: "writeQueueNums", dataIndex: "writeQueueNums", key: "writeQueueNums", width: 140 },
@@ -1149,36 +1156,36 @@ const _e = [
   },
   { title: "unit", dataIndex: "unit", key: "unit", width: 110, render: (e) => e ?? "—" }
 ];
-function Ze() {
-  const { instance: e, poll: t } = ce(), [s, l] = v([]), [o, u] = v(null), [c, m] = v(null), [b, T] = v({}), [C, O] = v(!1), _ = Y(async () => {
+function He() {
+  const { instance: e, poll: t } = ie(), [s, i] = v([]), [o, u] = v(null), [c, m] = v(null), [b, S] = v({}), [C, O] = v(!1), _ = Y(async () => {
     var a;
     try {
-      const i = await U.cluster(), x = ((a = i == null ? void 0 : i.data) == null ? void 0 : a.brokerAddrTable) || {}, k = Object.keys(x);
-      return l(k), u((w) => w && k.includes(w) ? w : k[0] || null), m(i && i.responseCode !== 0 ? new Error(X(i) || "码 4 返回非 0") : null), k;
-    } catch (i) {
-      return l([]), u(null), m(i), [];
+      const l = await U.cluster(), x = ((a = l == null ? void 0 : l.data) == null ? void 0 : a.brokerAddrTable) || {}, k = Object.keys(x);
+      return i(k), u((w) => w && k.includes(w) ? w : k[0] || null), m(l && l.responseCode !== 0 ? new Error(K(l) || "码 4 返回非 0") : null), k;
+    } catch (l) {
+      return i([]), u(null), m(l), [];
     }
   }, []), p = Y(async (a) => {
-    O(!0), await Promise.all(_e.map(async (i) => {
-      T((x) => ({ ...x, [i.key]: { loading: !0 } }));
+    O(!0), await Promise.all(Oe.map(async (l) => {
+      S((x) => ({ ...x, [l.key]: { loading: !0 } }));
       try {
-        const x = await U[i.api](a || void 0);
-        T((k) => ({ ...k, [i.key]: x }));
+        const x = await U[l.api](a || void 0);
+        S((k) => ({ ...k, [l.key]: x }));
       } catch (x) {
-        T((k) => ({ ...k, [i.key]: { loadError: L(x), raw: x } }));
+        S((k) => ({ ...k, [l.key]: { loadError: L(x), raw: x } }));
       }
     })), O(!1), t();
   }, [t]);
-  ne(() => {
+  te(() => {
     _();
-  }, [_]), ne(() => {
+  }, [_]), te(() => {
     p(o || void 0);
   }, [o, p]);
   const f = (a) => {
     var x;
-    const i = (x = a == null ? void 0 : a.data) == null ? void 0 : x.offsetTable;
-    return !i || typeof i != "object" ? null : Object.keys(i).flatMap((k) => {
-      const w = i[k];
+    const l = (x = a == null ? void 0 : a.data) == null ? void 0 : x.offsetTable;
+    return !l || typeof l != "object" ? null : Object.keys(l).flatMap((k) => {
+      const w = l[k];
       return !w || typeof w != "object" ? [] : Object.keys(w).map((P) => ({
         key: `${k}-${P}`,
         topic: k,
@@ -1186,9 +1193,9 @@ function Ze() {
         maxOffset: w[P]
       }));
     });
-  }, D = Oe(() => {
-    var i, x;
-    const a = (x = (i = b.topicConfig) == null ? void 0 : i.data) == null ? void 0 : x.topicConfigTable;
+  }, D = Re(() => {
+    var l, x;
+    const a = (x = (l = b.topicConfig) == null ? void 0 : l.data) == null ? void 0 : x.topicConfigTable;
     return !a || typeof a != "object" ? null : Object.keys(a).map((k) => ({ key: k, topic: k, ...a[k] || {} }));
   }, [b.topicConfig]);
   return /* @__PURE__ */ r.jsxs("div", { children: [
@@ -1199,10 +1206,10 @@ function Ze() {
         subtitle: "BrokerOutAPI 码 320/321/322/323/324 · 地址由 NameServer 码 4 发现且只允许环回"
       }
     ),
-    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsxs(q, { children: [
+    /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsxs(z, { children: [
       /* @__PURE__ */ r.jsx("span", { style: { color: "#64748b", fontSize: 12 }, children: "Broker" }),
       /* @__PURE__ */ r.jsx(
-        $e,
+        Me,
         {
           size: "small",
           style: { width: 240 },
@@ -1212,11 +1219,11 @@ function Ze() {
           options: s.map((a) => ({ value: a, label: a }))
         }
       ),
-      /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(oe, {}), loading: C, onClick: () => p(o || void 0), children: "刷新五档" })
+      /* @__PURE__ */ r.jsx(q, { icon: /* @__PURE__ */ r.jsx(ne, {}), loading: C, onClick: () => p(o || void 0), children: "刷新五档" })
     ] }), children: [
+      /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
-      /* @__PURE__ */ r.jsx(ue, { data: e }),
-      /* @__PURE__ */ r.jsx(xe, { data: e }),
+      /* @__PURE__ */ r.jsx(ke, { data: e }),
       c && /* @__PURE__ */ r.jsx(
         y,
         {
@@ -1227,7 +1234,7 @@ function Ze() {
           description: "下面五档的地址全靠码 4，发现不到就只能整页 503 —— 那是「集群里没有注册过的 broker」，不是这五档本身坏了。"
         }
       ),
-      /* @__PURE__ */ r.jsxs(he, { gutter: 16, children: [
+      /* @__PURE__ */ r.jsxs(be, { gutter: 16, children: [
         /* @__PURE__ */ r.jsx(A, { span: 8, children: /* @__PURE__ */ r.jsx(B, { title: "码 4 发现的 broker 数", value: s.length }) }),
         /* @__PURE__ */ r.jsx(A, { span: 8, children: /* @__PURE__ */ r.jsx(B, { title: "当前取数对象", value: o || "—" }) }),
         /* @__PURE__ */ r.jsx(A, { span: 8, children: /* @__PURE__ */ r.jsx(
@@ -1239,8 +1246,8 @@ function Ze() {
         ) })
       ] })
     ] }),
-    _e.map((a) => /* @__PURE__ */ r.jsx(
-      He,
+    Oe.map((a) => /* @__PURE__ */ r.jsx(
+      er,
       {
         section: a,
         state: b[a.key],
@@ -1250,8 +1257,8 @@ function Ze() {
     ))
   ] });
 }
-function He({ section: e, state: t, rows: s }) {
-  const l = t == null ? void 0 : t.loadError, o = t && !l && t.responseCode !== void 0 ? X(t) : null, u = Me[e.path], c = t == null ? void 0 : t.data;
+function er({ section: e, state: t, rows: s }) {
+  const i = t == null ? void 0 : t.loadError, o = t && !i && t.responseCode !== void 0 ? K(t) : null, u = qe[e.path], c = t == null ? void 0 : t.data;
   return /* @__PURE__ */ r.jsxs(
     I,
     {
@@ -1261,9 +1268,9 @@ function He({ section: e, state: t, rows: s }) {
       extra: t != null && t.target ? /* @__PURE__ */ r.jsx(h, { children: String(t.target) }) : null,
       children: [
         !t || t.loading ? /* @__PURE__ */ r.jsx("span", { style: { color: "#94a3b8", fontSize: 12 }, children: "取数中…" }) : null,
-        l && /* @__PURE__ */ r.jsx(y, { type: "error", showIcon: !0, message: `调用失败：${l}` }),
+        i && /* @__PURE__ */ r.jsx(y, { type: "error", showIcon: !0, message: `调用失败：${i}` }),
         o && /* @__PURE__ */ r.jsx(y, { type: "warning", showIcon: !0, style: { marginBottom: 12 }, message: o }),
-        t && !l && /* @__PURE__ */ r.jsx(Z, { res: t }),
+        t && !i && /* @__PURE__ */ r.jsx(X, { res: t }),
         u && /* @__PURE__ */ r.jsx(
           y,
           {
@@ -1274,37 +1281,39 @@ function He({ section: e, state: t, rows: s }) {
             description: u
           }
         ),
-        t && !l && c && e.key === "topicConfig" && (s && s.length ? /* @__PURE__ */ r.jsx(
-          K,
+        t && !i && c && e.key === "topicConfig" && (s && s.length ? /* @__PURE__ */ r.jsx(
+          fe,
           {
-            size: "small",
+            rows: s,
+            columns: Ze,
             rowKey: "key",
-            dataSource: s,
-            columns: Xe,
-            pagination: { pageSize: 10, hideOnSinglePage: !0 }
+            searchKeys: "topic",
+            searchPlaceholder: "按 Topic 名过滤",
+            cardProps: { variant: "borderless", styles: { body: { padding: 0 } } }
           }
-        ) : /* @__PURE__ */ r.jsx(se, { title: "topicConfigTable 是空的", description: "本 broker 没有注册任何 topic 配置。" })),
-        t && !l && c && (e.key === "consumerOffset" || e.key === "delayOffset") && (s && s.length ? /* @__PURE__ */ r.jsx(
-          K,
+        ) : /* @__PURE__ */ r.jsx(oe, { title: "topicConfigTable 是空的", description: "本 broker 没有注册任何 topic 配置。" })),
+        t && !i && c && (e.key === "consumerOffset" || e.key === "delayOffset") && (s && s.length ? /* @__PURE__ */ r.jsx(
+          fe,
           {
-            size: "small",
-            rowKey: "key",
-            dataSource: s,
-            pagination: { pageSize: 10, hideOnSinglePage: !0 },
+            rows: s,
             columns: [
               { title: "Topic", dataIndex: "topic", key: "topic", render: (m) => /* @__PURE__ */ r.jsx("code", { children: m }) },
               { title: "queueId", dataIndex: "queueId", key: "queueId", width: 110 },
               { title: "maxOffset", dataIndex: "maxOffset", key: "maxOffset", width: 140 }
-            ]
+            ],
+            rowKey: "key",
+            searchKeys: "topic,queueId",
+            searchPlaceholder: "按 Topic / queueId 过滤",
+            cardProps: { variant: "borderless", styles: { body: { padding: 0 } } }
           }
         ) : /* @__PURE__ */ r.jsx(
-          se,
+          oe,
           {
             title: "offsetTable 是空的",
             description: "注意上面那条「上游语义」：位点表为空可能是真没有消息，也可能只是这条链路上还没产生过写入。"
           }
         )),
-        t && !l && c && e.key === "subscription" && /* @__PURE__ */ r.jsxs("div", { style: { color: "#64748b", fontSize: 12 }, children: [
+        t && !i && c && e.key === "subscription" && /* @__PURE__ */ r.jsxs("div", { style: { color: "#64748b", fontSize: 12 }, children: [
           "body 原文（注意它连 ",
           /* @__PURE__ */ r.jsx("code", { children: "subscription" }),
           " 字段都没有，是一个空的",
@@ -1312,7 +1321,7 @@ function He({ section: e, state: t, rows: s }) {
           "）：",
           /* @__PURE__ */ r.jsx("pre", { style: { whiteSpace: "pre-wrap", marginTop: 8, fontSize: 12 }, children: JSON.stringify(c, null, 2) })
         ] }),
-        t && !l && c && e.key === "dataVersion" && /* @__PURE__ */ r.jsx(
+        t && !i && c && e.key === "dataVersion" && /* @__PURE__ */ r.jsx(
           Q,
           {
             bordered: !0,
@@ -1321,38 +1330,38 @@ function He({ section: e, state: t, rows: s }) {
             items: Object.keys(c).map((m) => ({
               key: m,
               label: m,
-              children: Ee(c[m])
+              children: Se(c[m])
             }))
           }
         ),
-        t && !l && (c == null ? void 0 : c.dataVersion) && e.key !== "dataVersion" && /* @__PURE__ */ r.jsxs("div", { style: { marginTop: 10, color: "#64748b", fontSize: 12 }, children: [
+        t && !i && (c == null ? void 0 : c.dataVersion) && e.key !== "dataVersion" && /* @__PURE__ */ r.jsxs("div", { style: { marginTop: 10, color: "#64748b", fontSize: 12 }, children: [
           "dataVersion：",
-          Ee(c.dataVersion)
+          Se(c.dataVersion)
         ] })
       ]
     }
   );
 }
-function dr() {
-  return /* @__PURE__ */ r.jsxs(Ae, { children: [
-    /* @__PURE__ */ r.jsx(ee, { index: !0, element: /* @__PURE__ */ r.jsx(Be, { to: "instance", replace: !0 }) }),
-    /* @__PURE__ */ r.jsx(ee, { path: "instance", element: /* @__PURE__ */ r.jsx(Ye, {}) }),
-    /* @__PURE__ */ r.jsx(ee, { path: "cluster", element: /* @__PURE__ */ r.jsx(Ge, {}) }),
-    /* @__PURE__ */ r.jsx(ee, { path: "topics", element: /* @__PURE__ */ r.jsx(Qe, {}) }),
-    /* @__PURE__ */ r.jsx(ee, { path: "broker", element: /* @__PURE__ */ r.jsx(Ze, {}) })
+function ur() {
+  return /* @__PURE__ */ r.jsxs(Be, { children: [
+    /* @__PURE__ */ r.jsx(H, { index: !0, element: /* @__PURE__ */ r.jsx($e, { to: "instance", replace: !0 }) }),
+    /* @__PURE__ */ r.jsx(H, { path: "instance", element: /* @__PURE__ */ r.jsx(Je, {}) }),
+    /* @__PURE__ */ r.jsx(H, { path: "cluster", element: /* @__PURE__ */ r.jsx(We, {}) }),
+    /* @__PURE__ */ r.jsx(H, { path: "topics", element: /* @__PURE__ */ r.jsx(Ke, {}) }),
+    /* @__PURE__ */ r.jsx(H, { path: "broker", element: /* @__PURE__ */ r.jsx(He, {}) })
   ] });
 }
 export {
-  Me as K,
-  dr as M,
-  cr as T,
-  be as Z,
-  lr as a,
+  qe as K,
+  ur as M,
+  dr as T,
+  xe as Z,
+  cr as a,
   ir as b,
   L as c,
-  Ee as d,
-  X as e,
-  ar as i,
+  Se as d,
+  K as e,
+  lr as i,
   r as j,
   U as m,
   ze as r

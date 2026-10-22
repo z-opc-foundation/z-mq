@@ -4,7 +4,7 @@ import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, mqUpstreamErrorText, routeNotExistRemark} from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {AttributionUnavailableBanner, ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState, PageHeader} from '@yuku123/z-frontend-common/ui'
+import {EmptyState, ListTable, PageHeader} from '@yuku123/z-frontend-common/ui'
 
 /**
  * Topic 列表 — NameServer 码 8 与 Broker 码 8 **并排**，外加按需下的码 3 路由详情。
@@ -143,12 +143,23 @@ export default function TopicListPage() {
                     <EmptyState title="两侧都没取到 topic 列表"
                                 description="这不是「集群里没有 topic」的证据：上面任一档报错、或上游回了非 0 业务码（HTTP 仍是 200），都到这里显示为取不到。先读上面的红/黄条定性，再决定要不要怀疑数据。"/>
                 ) : (
-                    <Table size="small" rowKey="key" loading={loading} dataSource={rows}
-                           columns={TOPIC_COLUMNS} pagination={{pageSize: 20, hideOnSinglePage: true}}
-                           expandable={{
-                               onExpand: (expanded, row) => { if (expanded) loadRoute(row.topic) },
-                               expandedRowRender: (row) => <RouteDetail state={routes[row.topic]}/>,
-                           }}/>
+                    /* 列表页走基座 ListTable（lead 008 §2 规则 2/3/4）：分页 / 过滤 / EmptyState 三件套。
+                       外层 Card 已经给了边框与内边距（里面还有横幅/告警/统计条），
+                       所以基座 Card 设成无边框，避免两层卡片套在一起。
+                       展开行（码 3 路由详情）仍由 antd Table 的 expandable 处理。 */
+                    <ListTable
+                        rows={rows}
+                        columns={TOPIC_COLUMNS}
+                        rowKey="key"
+                        loading={loading}
+                        searchKeys="topic"
+                        searchPlaceholder="按 topic 名过滤"
+                        cardProps={{variant: 'borderless', styles: {body: {padding: 0}}}}
+                        expandable={{
+                            onExpand: (expanded, row) => { if (expanded) loadRoute(row.topic) },
+                            expandedRowRender: (row) => <RouteDetail state={routes[row.topic]}/>,
+                        }}
+                    />
                 )}
             </Card>
 

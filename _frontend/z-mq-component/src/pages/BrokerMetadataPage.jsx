@@ -1,12 +1,12 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {Alert, Button, Card, Col, Descriptions, Row, Select, Space, Statistic, Table, Tag} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Row, Select, Space, Statistic, Tag} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import {
     KNOWN_EMPTY_IN_120, dataVersionText, mqApi, mqErrorText, mqUpstreamErrorText,
 } from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {AttributionUnavailableBanner, ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState, PageHeader} from '@yuku123/z-frontend-common/ui'
+import {EmptyState, ListTable, PageHeader} from '@yuku123/z-frontend-common/ui'
 
 /**
  * Broker 元数据 — 码 320/321/322/323/324 五档一次拉齐。
@@ -167,18 +167,33 @@ function SectionCard({section, state, rows}) {
             )}
             {state && !loadError && data && section.key === 'topicConfig' && (
                 rows && rows.length
-                    ? <Table size="small" rowKey="key" dataSource={rows} columns={TOPIC_CONFIG_COLUMNS}
-                             pagination={{pageSize: 10, hideOnSinglePage: true}}/>
+                    /* 列表页走基座 ListTable（lead 008 §2 规则 2/3/4）：分页 / 过滤 / EmptyState 三件套。
+                       外层 Card 已给边框与内边距（这里还有上游语义告警），基座 Card 设无边框，
+                       避免两层卡片套在一起。 */
+                    ? <ListTable
+                        rows={rows}
+                        columns={TOPIC_CONFIG_COLUMNS}
+                        rowKey="key"
+                        searchKeys="topic"
+                        searchPlaceholder="按 Topic 名过滤"
+                        cardProps={{variant: 'borderless', styles: {body: {padding: 0}}}}
+                    />
                     : <EmptyState title="topicConfigTable 是空的" description="本 broker 没有注册任何 topic 配置。"/>
             )}
             {state && !loadError && data && (section.key === 'consumerOffset' || section.key === 'delayOffset') && (
                 rows && rows.length
-                    ? <Table size="small" rowKey="key" dataSource={rows} pagination={{pageSize: 10, hideOnSinglePage: true}}
-                             columns={[
-                                 {title: 'Topic', dataIndex: 'topic', key: 'topic', render: (v) => <code>{v}</code>},
-                                 {title: 'queueId', dataIndex: 'queueId', key: 'queueId', width: 110},
-                                 {title: 'maxOffset', dataIndex: 'maxOffset', key: 'maxOffset', width: 140},
-                             ]}/>
+                    ? <ListTable
+                        rows={rows}
+                        columns={[
+                            {title: 'Topic', dataIndex: 'topic', key: 'topic', render: (v) => <code>{v}</code>},
+                            {title: 'queueId', dataIndex: 'queueId', key: 'queueId', width: 110},
+                            {title: 'maxOffset', dataIndex: 'maxOffset', key: 'maxOffset', width: 140},
+                        ]}
+                        rowKey="key"
+                        searchKeys="topic,queueId"
+                        searchPlaceholder="按 Topic / queueId 过滤"
+                        cardProps={{variant: 'borderless', styles: {body: {padding: 0}}}}
+                    />
                     : <EmptyState title="offsetTable 是空的"
                                   description="注意上面那条「上游语义」：位点表为空可能是真没有消息，也可能只是这条链路上还没产生过写入。"/>
             )}
