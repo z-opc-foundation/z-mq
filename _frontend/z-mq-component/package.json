@@ -1,6 +1,6 @@
 {
   "name": "@yuku123/z-mq-component",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "z-mq 可复用前端组件：消息队列管理台（实例自省/Topic 清单；lead 005 §9）",
   "type": "module",
   "main": "./dist/index.js",
