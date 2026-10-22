@@ -52,6 +52,16 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- Remoting 层（NettyServerConfig / bind host 默认值常量的出处）。
+             显式声明而不是靠 z-mq-client 传递依赖：embedded server config 直接用
+             NettyServerConfig.DEFAULT_HOST / HOST_ENV / HOST_SYSTEM_PROPERTY，
+             靠传递依赖编译能过，但一旦上游改依赖就断。 -->
+        <dependency>
+            <groupId>io.github.yuku123</groupId>
+            <artifactId>z-mq-remoting</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

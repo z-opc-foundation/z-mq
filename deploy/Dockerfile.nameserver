@@ -58,6 +58,12 @@ COPY --from=builder /build/z-mq-nameserver/target/z-mq-nameserver-*-exec.jar /ap
 
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
 ENV ZMQ_NAMESRV_PORT="9876"
+# ⚠ bind host 必须**显式**声明，不能靠默认值。
+# NettyServerConfig 的默认 bind host 是回环（127.0.0.1）—— z-mq 的 Netty 面走私有二进制
+# 协议且**协议层没有认证**，绑通配地址等于把"可读写"开放给整个局域网。
+# 但容器化部署要靠 Service / NodePort 被访问（Service 选的是 Pod IP，不是容器内的回环），
+# 所以这一形态必须显式声明 0.0.0.0。默认回环 + 部署形态显式声明，是这里的两条规矩。
+ENV ZMQ_SERVER_HOST="0.0.0.0"
 # NameServerStartup 的第二个位置参数是 KV 配置路径；不给就用 NamesrvConfig 里的默认值，
 # 而那个默认值是硬编码的开发机绝对路径（~/zmq/namesrv/kvConfig.json），容器里不存在 ⇒ 必须显式传。
 ENV ZMQ_NAMESRV_KV_CONFIG="/data/namesrv/kvConfig.json"

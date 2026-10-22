@@ -53,6 +53,12 @@ COPY --from=builder /build/z-mq-broker/target/z-mq-broker-*-exec.jar /app/broker
 
 ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC"
 ENV ZMQ_BROKER_PORT="10911"
+# ⚠ bind host 必须**显式**声明，不能靠默认值。
+# NettyServerConfig 的默认 bind host 是回环（127.0.0.1）—— z-mq 的 Netty 面走私有二进制
+# 协议且**协议层没有认证**，绑通配地址等于把"可读写"开放给整个局域网。
+# 但容器化部署要靠 Service / NodePort 被访问（Service 选的是 Pod IP，不是容器内的回环），
+# 所以这一形态必须显式声明 0.0.0.0。默认回环 + 部署形态显式声明，是这里的两条规矩。
+ENV ZMQ_SERVER_HOST="0.0.0.0"
 # compose/k8s 里覆盖成 http://<nameserver-service>:9876 之类
 ENV ZMQ_NAMESRV_ADDR="127.0.0.1:9876"
 ENV ZMQ_STORE_PATH="/data/store"

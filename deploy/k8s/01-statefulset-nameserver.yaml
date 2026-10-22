@@ -28,6 +28,11 @@ spec:
               value: "9876"
             - name: ZMQ_NAMESRV_KV_CONFIG
               value: /data/namesrv/kvConfig.json
+            # ⚠ bind host 显式声明 0.0.0.0：Service/NodePort 选的是 Pod IP，
+            # 不是容器内的 127.0.0.1 ⇒ 容器形态必须监听通配地址。
+            # 代码侧默认是回环（协议层无认证，绑通配=开放给整个局域网），靠这里显式打开。
+            - name: ZMQ_SERVER_HOST
+              value: "0.0.0.0"
           volumeMounts:
             - name: data
               mountPath: /data/namesrv

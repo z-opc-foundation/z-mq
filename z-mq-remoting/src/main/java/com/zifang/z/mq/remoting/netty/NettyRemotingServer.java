@@ -150,11 +150,18 @@ public class NettyRemotingServer extends NettyRemotingAbstract {
 
         // 绑定端口并启动
         try {
-            ChannelFuture sync = this.serverBootstrap.bind(nettyServerConfig.getListenPort()).sync();
+            // ⚠ 这里曾经是 bind(int)：Netty 的单参 bind 恒为**通配地址**（0.0.0.0 / ::），
+            // 而 z-mq 的 Netty 面走私有二进制协议、**协议层没有认证** ⇒ 监听在通配地址上
+            // 等于把"可读可写"的能力开放给整个局域网。现在显式带上 bind host，
+            // 默认回环（NettyServerConfig.DEFAULT_HOST），要对外暴露必须显式声明。
+            String bindHost = nettyServerConfig.getHost();
+            ChannelFuture sync = this.serverBootstrap
+                    .bind(new InetSocketAddress(bindHost, nettyServerConfig.getListenPort()))
+                    .sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
             this.port = addr.getPort();
             this.serverChannel = sync.channel();
-            log.info("NettyRemotingServer started on port {}", this.port);
+            log.info("NettyRemotingServer started on {}:{}", addr.getAddress().getHostAddress(), this.port);
         } catch (InterruptedException e) {
             throw new RuntimeException("Failed to start NettyRemotingServer", e);
         }

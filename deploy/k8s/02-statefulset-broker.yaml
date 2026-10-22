@@ -26,6 +26,11 @@ spec:
           env:
             - name: ZMQ_BROKER_PORT
               value: "10911"
+            # ⚠ bind host 显式声明 0.0.0.0：Service/NodePort 选的是 Pod IP，
+            # 不是容器内的 127.0.0.1 ⇒ 容器形态必须监听通配地址。
+            # 代码侧默认是回环（协议层无认证，绑通配=开放给整个局域网），靠这里显式打开。
+            - name: ZMQ_SERVER_HOST
+              value: "0.0.0.0"
             # 必须用 Service 名，不能是 127.0.0.1：broker 拿到的是自己容器内的回环地址
             - name: ZMQ_NAMESRV_ADDR
               value: z-mq-nameserver:9876

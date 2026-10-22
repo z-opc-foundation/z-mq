@@ -1,5 +1,6 @@
 package com.zifang.z.mq.spring.host;
 
+import com.zifang.z.mq.remoting.netty.NettyServerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,6 +55,16 @@ public class ZMqEmbeddedServerConfig {
     private String brokerStorePath;
 
     /**
+     * 内嵌 namesrv / broker 的 bind host。
+     * <p>
+     * 默认 <b>回环</b>（127.0.0.1）：这两个端口走 Netty 私有二进制协议、
+     * <b>协议层没有认证</b> ⇒ 监听在通配地址上等于把"可读写"开放给整个局域网。
+     * 需要对外暴露时显式声明 {@code z.mq.server.host=0.0.0.0}，别靠默认值。
+     */
+    @Value("${z.mq.server.host:127.0.0.1}")
+    private String serverHost;
+
+    /**
      * z-opc-main-starter fat jar 绝对路径, 由 main() 静态块设置.
      * 默认 null, 通过 {@link #setBootJarPath(String)} 注入.
      */
@@ -97,6 +108,49 @@ public class ZMqEmbeddedServerConfig {
         }
     }
 
+    /**
+     * 归一化 bind host：空白一律退回回环。
+     * <p>
+     * 绝不因为配错就退回通配地址 —— 那等于把无认证的私有协议开放给整个局域网。
+     */
+    private String resolveServerHost() {
+        String h = serverHost == null ? "" : serverHost.trim();
+        return h.isEmpty() ? NettyServerConfig.DEFAULT_HOST : h;
+    }
+
+    /**
+     * 子进程 JVM 参数：把 bind host 透传给 namesrv / broker。
+     * <p>
+     * 用 {@code -D} 系统属性而不是位置参数 ⇒ NameServerStartup / BrokerStartup 的
+     * 位置参数语义完全不变（那两个类的启动契约不动），host 由它们内部 new 出来的
+     * {@code NettyServerConfig} 自己解析。
+     */
+    private List<String> childJvmArgs() {
+        String host = resolveServerHost();
+        List<String> args = new ArrayList<>();
+        args.add("-Dz.mq.server.host=" + host);
+        if (!isWildcard(host)) {
+            // 公布地址与 bind 地址保持一致：bind 回环就公布回环，
+            // 否则客户端按路由表去连会连到别处（localhost 可能先解析成 ::1）。
+            args.add("-DbrokerIp1=" + host);
+        }
+        return args;
+    }
+
+    private static boolean isWildcard(String host) {
+        return "0.0.0.0".equals(host) || "::".equals(host) || "::0".equals(host);
+    }
+
+    /** 供测试读取生效的 bind host（生产代码走 resolveServerHost 自身）。 */
+    String resolveServerHostForTest() {
+        return resolveServerHost();
+    }
+
+    /** 供测试读取子进程 JVM 参数（生产代码走 childJvmArgs 自身）。 */
+    List<String> childJvmArgsForTest() {
+        return childJvmArgs();
+    }
+
     private Process spawn(String bootJar, String mainClass, List<String> args, String label) throws IOException {
         String javaHome = System.getProperty("java.home");
         String javaBin = (javaHome != null && !javaHome.isEmpty() ? javaHome : "") + "/bin/java";
@@ -114,12 +168,16 @@ public class ZMqEmbeddedServerConfig {
         cmd.add(javaBin);
         // 让子进程走 log4j2 (跟主进程一致)
         cmd.add("-Dorg.springframework.boot.logging.LoggingSystem=org.springframework.boot.logging.log4j2.Log4J2LoggingSystem");
+        cmd.addAll(childJvmArgs());
         cmd.add("-cp");
         cmd.add(cp);
         cmd.add(mainClass);
         cmd.addAll(args);
         log.info("[z-mq] spawning {}: {}", label, String.join(" ", cmd));
         ProcessBuilder pb = new ProcessBuilder(cmd);
+        // 环境变量同样带上：万一子进程换启动方式（不走 -D），host 仍能落到同一个值
+        pb.environment().put(NettyServerConfig.HOST_ENV, resolveServerHost());
+        pb.environment().put(NettyServerConfig.HOST_SYSTEM_PROPERTY, resolveServerHost());
         File logFile = new File(System.getProperty("java.io.tmpdir"), "z-mq-" + label + ".log");
         // 每代构建覆盖重写，不能用 appendTo: MqProxyController 会把这个文件里的 BindException 条数
         // 当作"本次子进程 bind 失败"的证据摆在页面顶部。实测 appendTo 下 5 次历史失败会盖住
