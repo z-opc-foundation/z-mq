@@ -159,6 +159,53 @@ public class MqProxyController {
     @Value("${z.mq.proxy.lsof-attribution.enabled:true}")
     private boolean lsofAttributionEnabled;
 
+    /**
+     * **允许拨的非环回目标白名单**（逗号分隔，每项 {@code host} 或 {@code host:port}）。
+     *
+     * <p><b>为什么要有这一格（2026-10-23, TASK-20261023-081）</b>：
+     * {@link #LOOPBACK_ADDR} 硬编码「只允许环回」，而 {@link #invoke()} 校验的是**目标地址**
+     * ⇒ 「把 {@code z.mq.namesrv-addr} 指到集群内的 z-mq Service」这条路**直接被 403 挡死**
+     * （{@code refused non-loopback target}）。但那道闸门有正当理由（见类注释：
+     * z-mq remoting 层无默认鉴权、9876/10911 通配 bind ⇒「前端只走 8888」是实际安全边界），
+     * 所以**不能裸放成「允许任意地址」**。
+     *
+     * <p><b>这一格就是那道闸门的等效替代管控</b>：
+     * <ul>
+     *   <li>能拨的目标 = 环回 ∪ <b>运维在配置里显式声明的这份清单</b>；清单来自
+     *       {@code application.properties}（部署面），<b>不是</b> HTTP 请求参数 ⇒
+     *       调用方无法把本层变成通用转发器；</li>
+     *   <li>请求参数里的 {@code brokerAddr} 仍然必须<b>先</b>出现在 NameServer 的
+     *       {@code brokerAddrTable} 里（{@link #resolveBrokerAddr} 原有判定不变），
+     *       <b>再</b>落在本清单里 ⇒ 两道闸门是「与」的关系；</li>
+     *   <li>可读码白名单（写码一律不可达）不动 ⇒ 放开的只是<b>目标</b>，不是<b>能力</b>；</li>
+     *   <li>默认空 = 只允许环回 ⇒ <b>与改造前逐字同行为</b>，现有部署零回归。</li>
+     * </ul>
+     *
+     * <p>残留风险（写明，不藏）：清单里的 host 若由外部可写的 DNS 解析，仍可能被指向别处 ⇒
+     * 只应写集群内的 Service 名。
+     */
+    @Value("${z.mq.proxy.dial-allowlist:}")
+    private String dialAllowlist;
+
+    /**
+     * 外部实例模式：本管理面指向的**不是**本 JVM 的内嵌子进程，而是一个由配置声明的外部 z-mq 实例。
+     *
+     * <p>打开后三件事变：① 可达性探测打**配置里的那个 host**（不是 127.0.0.1）；
+     * ② 归属自证改由「配置声明」确定（本地 lsof 属主比对只对内嵌子进程有意义）；
+     * ③ {@code __instance} 自报 {@code instanceMode=external}。
+     *
+     * <p>默认 false = 内嵌模式（原有行为逐字不变）。
+     */
+    @Value("${z.mq.proxy.external-instance:false}")
+    private boolean externalInstance;
+
+    /**
+     * 外部实例的 broker 公布地址（{@code host:port}），可选。
+     * 供 {@code __instance} 的 {@code brokerPortReachable} 探测与错误提示用。
+     */
+    @Value("${z.mq.broker-addr:}")
+    private String brokerAddr;
+
     public MqProxyController(ObjectProvider<ZMqEmbeddedServerConfig> embeddedProvider) {
         this.embeddedProvider = embeddedProvider;
     }
@@ -180,8 +227,12 @@ public class MqProxyController {
         ChildState nsChild = childOf(cfg, "nameserverProcess");
         ChildState brChild = childOf(cfg, "brokerProcess");
 
-        boolean nsReachable = tcpReachable(namesrvPort);
-        boolean brReachable = tcpReachable(brokerPort);
+        boolean nsReachable = externalInstance
+                ? tcpReachable(hostOf(namesrvAddr), portOf(namesrvAddr))
+                : tcpReachable(namesrvPort);
+        boolean brReachable = (externalInstance && brokerAddr != null && !brokerAddr.trim().isEmpty())
+                ? tcpReachable(hostOf(brokerAddr.trim()), portOf(brokerAddr.trim()))
+                : tcpReachable(brokerPort);
         Long nsOwner = lsofOwnerPid(namesrvPort);
         Long brOwner = lsofOwnerPid(brokerPort);
 
@@ -197,6 +248,10 @@ public class MqProxyController {
                 + "下面每个端点都是「只读请求码 → JSON」的转换，不是 HTTP 转发");
         out.put("embeddedConfigLoaded", cfg != null);
         out.put("zmqEnabled", cfg != null);
+        out.put("instanceMode", externalInstance ? "external" : "embedded");
+        out.put("externalInstance", externalInstance);
+        out.put("dialAllowlist", dialAllowlist);
+        out.put("brokerAddr", brokerAddr);
         out.put("namesrvAddr", namesrvAddr);
         out.put("namesrvPort", namesrvPort);
         out.put("brokerPort", brokerPort);
@@ -223,17 +278,25 @@ public class MqProxyController {
         out.put("brokerEmbeddedRunning", brOwned);
 
         // 外来监听者嫌疑: 端口有人答, 但属主不是本 JVM 的子进程
-        out.put("namesrvForeignListenerSuspected", nsReachable && !nsOwned);
-        out.put("brokerForeignListenerSuspected", brReachable && !brOwned);
-        out.put("foreignListenerSuspected",
-                (nsReachable && !nsOwned) || (brReachable && !brOwned));
+        // ⚠ 外部实例模式下**不适用**: 目标是集群内另一台的 z-mq, 本机 lsof 本来就查不到它的属主
+        //   ⇒ 那不是"嫌疑", 是配置的常态。归属改由「配置声明 + 拨号白名单」确定（见 attributionMethod）。
+        boolean nsSuspect = !externalInstance && nsReachable && !nsOwned;
+        boolean brSuspect = !externalInstance && brReachable && !brOwned;
+        out.put("namesrvForeignListenerSuspected", nsSuspect);
+        out.put("brokerForeignListenerSuspected", brSuspect);
+        out.put("foreignListenerSuspected", nsSuspect || brSuspect);
         // 拿不到属主 pid 时不许把"没嫌疑"当"是自己的"
-        out.put("attributionAvailable",
-                !lsofAttributionEnabled || (nsOwner != null && brOwner != null));
-        out.put("attributionMethod", lsofAttributionEnabled
+        out.put("attributionAvailable", externalInstance
+                ? Boolean.TRUE
+                : (!lsofAttributionEnabled || (nsOwner != null && brOwner != null)));
+        out.put("attributionMethod", externalInstance
+                ? "外部实例 (z.mq.proxy.external-instance=true)：归属由配置声明确定 —— 拨号目标必须同时满足"
+                + "① 在 z.mq.proxy.dial-allowlist 里；② broker 侧还必须在 NameServer 的 brokerAddrTable 里。"
+                + "本地 lsof 属主比对只对内嵌子进程有意义，此处不适用。"
+                : (lsofAttributionEnabled
                 ? "lsof -nP -iTCP:<port> -sTCP:LISTEN -t，与本 JVM 子进程 pid 比对；"
                 + "不能用「属主 == 8888 那个 pid」，因为 z-mq 的内嵌形态天然是子进程"
-                : "已关闭 (zmq.proxy.lsof-attribution.enabled=false) ⇒ 归属无法自证");
+                : "已关闭 (zmq.proxy.lsof-attribution.enabled=false) ⇒ 归属无法自证"));
 
         // bind 失败的原文：spawn 器把子进程 stdout/stderr 追加到 ${java.io.tmpdir}/z-mq-<label>.log
         Map<String, Object> nsLog = spawnLog("nameserver");
@@ -372,10 +435,13 @@ public class MqProxyController {
         r.put("target", addr);
         r.put("requestCode", code);
         r.put("requestName", CODE_NAMES.get(String.valueOf(code)));
-        if (addr == null || !LOOPBACK_ADDR.matcher(addr).matches()) {
+        if (!dialAllowed(addr, dialAllowlist)) {
             r.put("httpStatus", 403);
             r.put("error", "refused non-loopback target: " + addr
                     + "（只允许拨 127.0.0.1/localhost/[::1]:port；nameserver 发现的地址若指向外部主机一律拒绝）");
+            r.put("dialAllowlist", dialAllowlist);
+            r.put("hint", "本层的拨号目标 = 环回 ∪ z.mq.proxy.dial-allowlist（运维在配置里声明，"
+                    + "不是 HTTP 参数）。要拨集群内的 z-mq，须把该 host[:port] 写进 z.mq.proxy.dial-allowlist。");
             return r;
         }
         MQClientInstance client = null;
@@ -568,19 +634,28 @@ public class MqProxyController {
         int http = statusOf(r);
         // 把"这不是本次构建的数据"这件事跟在每一个数据响应上，页面藏不住
         if (http == 200) {
-            ZMqEmbeddedServerConfig cfg = embeddedProvider.getIfAvailable();
-            boolean isNamesrv = "namesrv".equals(String.valueOf(r.get("tier")));
-            ChildState cs = childOf(cfg, isNamesrv ? "nameserverProcess" : "brokerProcess");
-            int port = isNamesrv ? namesrvPort : brokerPort;
-            Long owner = lsofOwnerPid(port);
-            boolean owned = owner != null && owner.equals(cs.pid);
-            r.put("attributionVerified", owned);
-            if (!owned) {
-                r.put("attributionUnverified", true);
-                r.put("attributionNote", "应答 " + port
-                        + " 的进程不是本 JVM spawn 的子进程（ownerPid=" + owner
-                        + ", myChildPid=" + cs.pid + "）—— 下面的 data 是别人的集群状态，"
-                        + "不能算本次孵化的结果");
+            if (externalInstance) {
+                // 外部实例: 归属由「配置声明 + 拨号白名单」确定, 不做本地 lsof 属主自证
+                r.put("attributionVerified", true);
+                r.put("attributionNote", "外部实例（z.mq.proxy.external-instance=true）：本响应来自 "
+                        + String.valueOf(r.get("target"))
+                        + "；该目标由 z.mq.proxy.dial-allowlist 声明（部署面配置，非请求参数）"
+                        + "，归属确定，不是本 JVM 的内嵌子进程");
+            } else {
+                ZMqEmbeddedServerConfig cfg = embeddedProvider.getIfAvailable();
+                boolean isNamesrv = "namesrv".equals(String.valueOf(r.get("tier")));
+                ChildState cs = childOf(cfg, isNamesrv ? "nameserverProcess" : "brokerProcess");
+                int port = isNamesrv ? namesrvPort : brokerPort;
+                Long owner = lsofOwnerPid(port);
+                boolean owned = owner != null && owner.equals(cs.pid);
+                r.put("attributionVerified", owned);
+                if (!owned) {
+                    r.put("attributionUnverified", true);
+                    r.put("attributionNote", "应答 " + port
+                            + " 的进程不是本 JVM spawn 的子进程（ownerPid=" + owner
+                            + ", myChildPid=" + cs.pid + "）—— 下面的 data 是别人的集群状态，"
+                            + "不能算本次孵化的结果");
+                }
             }
         }
         writeJson(resp, http, r);
@@ -589,6 +664,15 @@ public class MqProxyController {
     private String buildHint(String addr, Exception e) {
         boolean connectFail = e instanceof com.zifang.z.mq.remoting.exception.RemotingConnectException
                 || (e.getMessage() != null && e.getMessage().toLowerCase().contains("connect"));
+        if (externalInstance) {
+            // 外部实例: 探的是「配置里的那个 host」, 不是 127.0.0.1
+            boolean reachable = tcpReachable(hostOf(addr), portOf(addr));
+            if (!reachable) {
+                return "外部实例不可达：" + addr + " —— 拨不到（host/端口写错？Service 名写错？"
+                        + "NetworkPolicy？）本层只拨 z.mq.proxy.dial-allowlist 声明的目标。";
+            }
+            return "外部实例已连通但上游返回异常：" + safeMsg(e);
+        }
         int port = portOf(addr);
         boolean reachable = tcpReachable(port);
         ChildState cs = childOf(embeddedProvider.getIfAvailable(),
@@ -721,10 +805,15 @@ public class MqProxyController {
     }
 
     private boolean tcpReachable(int port) {
-        if (port <= 0) return false;
+        return tcpReachable("127.0.0.1", port);
+    }
+
+    /** 探某个 host:port 的 TCP 可达性（外部实例模式下探的是配置里的那个 host，不是回环）。 */
+    private boolean tcpReachable(String host, int port) {
+        if (port <= 0 || host == null || host.trim().isEmpty()) return false;
         Socket s = new Socket();
         try {
-            s.connect(new InetSocketAddress("127.0.0.1", port), TCP_PROBE_TIMEOUT_MS);
+            s.connect(new InetSocketAddress(host.trim(), port), TCP_PROBE_TIMEOUT_MS);
             return true;
         } catch (Exception e) {
             return false;
@@ -734,6 +823,68 @@ public class MqProxyController {
             } catch (Exception ignore) {
             }
         }
+    }
+
+    /**
+     * <b>拨号闸门</b>：环回永远允许；非环回只允许运维在 {@code z.mq.proxy.dial-allowlist} 里声明的目标。
+     *
+     * <p>纯函数（不碰 Spring 状态）⇒ 可直接单测；默认空清单 ⇒ 只允许环回（与改造前逐字同行为）。
+     *
+     * @param addr        目标地址 {@code host:port}（或裸 {@code host}）
+     * @param allowlistCsv 逗号分隔的 {@code host} / {@code host:port} 清单
+     */
+    static boolean dialAllowed(String addr, String allowlistCsv) {
+        if (addr == null || addr.trim().isEmpty()) {
+            return false;
+        }
+        String target = addr.trim();
+        if (LOOPBACK_ADDR.matcher(target).matches()) {
+            return true;
+        }
+        if (allowlistCsv == null || allowlistCsv.trim().isEmpty()) {
+            return false;
+        }
+        String host = hostOf(target);
+        int port = portOf(target);
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+        for (String raw : allowlistCsv.split(",")) {
+            String entry = raw.trim();
+            if (entry.isEmpty()) {
+                continue;
+            }
+            int colon = entry.lastIndexOf(':');
+            boolean hasPort = colon > 0 && colon < entry.length() - 1;
+            String entryHost = hasPort ? entry.substring(0, colon).trim() : entry;
+            if (!entryHost.equalsIgnoreCase(host)) {
+                continue;
+            }
+            if (!hasPort) {
+                // 只写 host = 该 host 的任意端口都允许
+                return true;
+            }
+            try {
+                if (Integer.parseInt(entry.substring(colon + 1).trim()) == port) {
+                    return true;
+                }
+            } catch (NumberFormatException ignore) {
+                // 清单里这一项写坏了就当它不匹配
+            }
+        }
+        return false;
+    }
+
+    /** 取 {@code host:port} 里的 host（IPv6 的 {@code [::1]:port} 也能取对）。 */
+    static String hostOf(String addr) {
+        if (addr == null) return "";
+        String s = addr.trim();
+        if (s.startsWith("[")) {
+            int end = s.indexOf(']');
+            return end > 0 ? s.substring(1, end) : s;
+        }
+        int i = s.lastIndexOf(':');
+        return i < 0 ? s : s.substring(0, i);
     }
 
     /**
