@@ -4,7 +4,7 @@ import {Alert, Button, Card, Col, Descriptions, Row, Space, Spin, Statistic, Tag
 import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi} from '../services/api'
 
-const {Title, Paragraph} = Typography
+const {Title} = Typography
 
 function fmtTs(ms) {
     if (!ms) return '-'
@@ -52,7 +52,6 @@ export default function Instance() {
                 <Button icon={<ReloadOutlined/>} onClick={fetch} loading={loading}>刷新</Button>
                 <Typography.Text type="secondary">15s 自动刷新</Typography.Text>
             </Space>
-            <Paragraph type="secondary">/mq/__instance 自省：自省接口通不通 / 内嵌 broker bind 没上 / 端口属主是谁 / bind 失败原文，四件事拆开答。</Paragraph>
 
             {error && <Alert type="error" showIcon style={{marginBottom: 16}} message="后端未连接" description={error}/>}
             {loading && !data && <Spin/>}

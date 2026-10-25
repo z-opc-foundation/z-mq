@@ -5,7 +5,7 @@ import {ReloadOutlined} from '@ant-design/icons'
 import {ListTable} from '@yuku123/z-frontend-common/ui'
 import {mqApi} from '../services/api'
 
-const {Title, Paragraph} = Typography
+const {Title} = Typography
 
 export default function Topics() {
     const [topics, setTopics] = useState([])
@@ -36,7 +36,6 @@ export default function Topics() {
             <Space style={{marginBottom: 16}}>
                 <Title level={4} style={{margin: 0}}>Topic 清单</Title>
             </Space>
-            <Paragraph type="secondary">集群当前所有 topic（/mq/topics，从 broker 侧拉取）。</Paragraph>
 
             {error && <Alert type="error" showIcon style={{marginBottom: 16}} message="后端未连接" description={error}/>}
 
