@@ -108,8 +108,7 @@ export default function TopicListPage() {
 
     return (
         <div>
-            <PageHeader title="Topic 列表"
-                        subtitle="NameServer 码 8 GET_ALL_TOPIC_LIST ∥ Broker 码 8 GET_ALL_TOPIC_LIST → 差集 + 按需码 3 路由详情"/>
+            <PageHeader title="Topic 列表"/>
             <Card extra={<Space>
                 <Button icon={<ReloadOutlined/>} loading={loading} onClick={load}>刷新</Button>
             </Space>}>
@@ -199,7 +198,7 @@ function RouteDetail({state}) {
                                       {key: 'elapsed', label: '往返', children: `${state.elapsedMs ?? '-'} ms`},
                                   ]}/>
                     <Table size="small" rowKey={(r) => `${r.brokerName}-${r.queueId ?? ''}`} dataSource={queues}
-                           pagination={false}
+                           pagination={false /* §2 规则 2 豁免：队列明细是抽屉里按 topic 展开的子表，行数由该 topic 的队列数决定，分页会把同一 topic 的队列拆散 */}
                            columns={[
                                {title: 'Broker', dataIndex: 'brokerName', key: 'brokerName', render: (v) => <code>{v}</code>},
                                {title: 'readQueueNums', dataIndex: 'readQueueNums', key: 'readQueueNums'},

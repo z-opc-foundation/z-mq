@@ -130,7 +130,7 @@ export default function ClusterPage() {
                                         description="没有任何 broker 向这台 NameServer 发过 REGISTER_BROKER（码 1）。两种成因要分开：① broker 子进程没起 / 没 bind 上（看顶部红条与「实例与端口」页的 bind 原文）；② broker 起了但配的 zmq.namesrv-addr 指向的是另一台 NameServer。本页不给「注册 broker」按钮 —— 那是写面，另立卡。"/>
                         ) : (
                             <Table size="small" rowKey="key" loading={loading}
-                                   dataSource={rows} columns={BROKER_COLUMNS} pagination={false}/>
+                                   dataSource={rows} columns={BROKER_COLUMNS} pagination={false /* §2 规则 2 豁免：brokerAddrTable 是 broker 向本 NameServer 的注册记录，一个集群内 broker 数量有界，不随业务增长 */}/>
                         )}
                     </>
                 )}

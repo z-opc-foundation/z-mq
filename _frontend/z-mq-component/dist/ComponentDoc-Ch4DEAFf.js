@@ -62,7 +62,7 @@ function Se(e) {
   const n = e.counter ?? e.counterValue, s = e.timestamp ? new Date(e.timestamp).toLocaleString("zh-CN", { hour12: !1 }) : "-";
   return `counter=${n ?? "?"} · timestamp=${s}`;
 }
-const mr = /^[A-Za-z0-9_\-.:;%#]{1,120}$/;
+const pr = /^[A-Za-z0-9_\-.:;%#]{1,120}$/;
 var ae = { exports: {} }, ee = {};
 /**
  * @license React
@@ -82,8 +82,8 @@ function De() {
     var c = null;
     if (u !== void 0 && (c = "" + u), o.key !== void 0 && (c = "" + o.key), "key" in o) {
       u = {};
-      for (var m in o)
-        m !== "key" && (u[m] = o[m]);
+      for (var p in o)
+        p !== "key" && (u[p] = o[p]);
     } else u = o;
     return o = u.ref, {
       $$typeof: e,
@@ -198,7 +198,7 @@ function Ue() {
       }
       return t.key !== void 0;
     }
-    function m(t, d) {
+    function p(t, d) {
       function g() {
         ye || (ye = !0, console.error(
           "%s: `key` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://react.dev/link/special-props)",
@@ -255,13 +255,13 @@ function Ue() {
         if (E)
           if (Oe(v)) {
             for (E = 0; E < v.length; E++)
-              w(v[E]);
+              P(v[E]);
             Object.freeze && Object.freeze(v);
           } else
             console.error(
               "React.jsx: Static children should always be an array. You are likely explicitly calling React.jsxs or React.jsxDEV. Use the Babel transform instead."
             );
-        else w(v);
+        else P(v);
       if (je.call(d, "key")) {
         v = e(t);
         var W = Object.keys(d).filter(function(Ne) {
@@ -282,10 +282,10 @@ React keys must be passed directly to JSX without using spread:
       }
       if (v = null, g !== void 0 && (s(g), v = "" + g), c(d) && (s(d.key), v = "" + d.key), "key" in d) {
         g = {};
-        for (var pe in d)
-          pe !== "key" && (g[pe] = d[pe]);
+        for (var me in d)
+          me !== "key" && (g[me] = d[me]);
       } else g = d;
-      return v && m(
+      return v && p(
         g,
         typeof t == "function" ? t.displayName || t.name || "Unknown" : t
       ), S(
@@ -297,24 +297,24 @@ React keys must be passed directly to JSX without using spread:
         M
       );
     }
-    function w(t) {
-      P(t) ? t._store && (t._store.validated = 1) : typeof t == "object" && t !== null && t.$$typeof === Q && (t._payload.status === "fulfilled" ? P(t._payload.value) && t._payload.value._store && (t._payload.value._store.validated = 1) : t._store && (t._store.validated = 1));
-    }
     function P(t) {
+      w(t) ? t._store && (t._store.validated = 1) : typeof t == "object" && t !== null && t.$$typeof === Q && (t._payload.status === "fulfilled" ? w(t._payload.value) && t._payload.value._store && (t._payload.value._store.validated = 1) : t._store && (t._store.validated = 1));
+    }
+    function w(t) {
       return typeof t == "object" && t !== null && t.$$typeof === f;
     }
-    var p = qe, f = Symbol.for("react.transitional.element"), D = Symbol.for("react.portal"), a = Symbol.for("react.fragment"), i = Symbol.for("react.strict_mode"), h = Symbol.for("react.profiler"), k = Symbol.for("react.consumer"), C = Symbol.for("react.context"), N = Symbol.for("react.forward_ref"), F = Symbol.for("react.suspense"), G = Symbol.for("react.suspense_list"), se = Symbol.for("react.memo"), Q = Symbol.for("react.lazy"), j = Symbol.for("react.activity"), R = Symbol.for("react.view_transition"), X = Symbol.for("react.client.reference"), ue = p.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, je = Object.prototype.hasOwnProperty, Oe = Array.isArray, me = console.createTask ? console.createTask : function() {
+    var m = qe, f = Symbol.for("react.transitional.element"), D = Symbol.for("react.portal"), a = Symbol.for("react.fragment"), i = Symbol.for("react.strict_mode"), h = Symbol.for("react.profiler"), k = Symbol.for("react.consumer"), C = Symbol.for("react.context"), N = Symbol.for("react.forward_ref"), F = Symbol.for("react.suspense"), G = Symbol.for("react.suspense_list"), se = Symbol.for("react.memo"), Q = Symbol.for("react.lazy"), j = Symbol.for("react.activity"), R = Symbol.for("react.view_transition"), X = Symbol.for("react.client.reference"), ue = m.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, je = Object.prototype.hasOwnProperty, Oe = Array.isArray, pe = console.createTask ? console.createTask : function() {
       return null;
     };
-    p = {
+    m = {
       react_stack_bottom_frame: function(t) {
         return t();
       }
     };
-    var ye, ge = {}, Te = p.react_stack_bottom_frame.bind(
-      p,
+    var ye, ge = {}, Te = m.react_stack_bottom_frame.bind(
+      m,
       u
-    )(), Ee = me(l(u)), ve = {};
+    )(), Ee = pe(l(u)), ve = {};
     re.Fragment = a, re.jsx = function(t, d, g) {
       var E = 1e4 > ue.recentlyCreatedOwnerStacks++;
       if (E) {
@@ -329,7 +329,7 @@ React keys must be passed directly to JSX without using spread:
         g,
         !1,
         M,
-        E ? me(l(t)) : Ee
+        E ? pe(l(t)) : Ee
       );
     }, re.jsxs = function(t, d, g) {
       var E = 1e4 > ue.recentlyCreatedOwnerStacks++;
@@ -345,14 +345,14 @@ React keys must be passed directly to JSX without using spread:
         g,
         !0,
         M,
-        E ? me(l(t)) : Ee
+        E ? pe(l(t)) : Ee
       );
     };
   })()), re;
 }
-var Pe;
+var we;
 function Ve() {
-  return Pe || (Pe = 1, process.env.NODE_ENV === "production" ? ae.exports = De() : ae.exports = Ue()), ae.exports;
+  return we || (we = 1, process.env.NODE_ENV === "production" ? ae.exports = De() : ae.exports = Ue()), ae.exports;
 }
 var r = Ve();
 function le() {
@@ -360,7 +360,7 @@ function le() {
   ne(() => () => {
     c.current = !1;
   }, []);
-  const m = Y(async () => {
+  const p = Y(async () => {
     try {
       const x = await V.instance();
       if (!c.current) return;
@@ -370,7 +370,7 @@ function le() {
       n(null), l(!0), u(L(x));
     }
   }, []);
-  return { instance: e, instanceError: s, instanceErrorText: o, poll: m };
+  return { instance: e, instanceError: s, instanceErrorText: o, poll: p };
 }
 function ce({ data: e }) {
   if (!e) return null;
@@ -455,22 +455,22 @@ const Ge = [
   { title: "常量名", dataIndex: "name", key: "name", render: (e) => /* @__PURE__ */ r.jsx("code", { children: e }) }
 ];
 function Qe() {
-  var P;
-  const { instance: e, instanceError: n, instanceErrorText: s, poll: l } = le(), [o, u] = T(null), [c, m] = T(null), [x, S] = T(!1), _ = Y(async (p) => {
+  var w;
+  const { instance: e, instanceError: n, instanceErrorText: s, poll: l } = le(), [o, u] = T(null), [c, p] = T(null), [x, S] = T(!1), _ = Y(async (m) => {
     S(!0);
     try {
-      const f = await V[p]();
-      u({ which: p, res: f }), m(null);
+      const f = await V[m]();
+      u({ which: m, res: f }), p(null);
     } catch (f) {
-      u(null), m(f);
+      u(null), p(f);
     } finally {
       S(!1), l();
     }
-  }, [l]), w = e ? Object.entries(e.readOnlyRequestCodes || {}).map(([p, f]) => ({
-    ep: p,
+  }, [l]), P = e ? Object.entries(e.readOnlyRequestCodes || {}).map(([m, f]) => ({
+    ep: m,
     code: f,
     name: (e.requestCodeNames || {})[String(f)] || "-",
-    key: p
+    key: m
   })) : [];
   return /* @__PURE__ */ r.jsxs("div", { children: [
     /* @__PURE__ */ r.jsx(
@@ -616,11 +616,11 @@ function Qe() {
             bordered: !0,
             size: "small",
             column: 1,
-            items: ["namesrvSpawnLog", "brokerSpawnLog"].map((p) => {
-              const f = e[p] || {};
+            items: ["namesrvSpawnLog", "brokerSpawnLog"].map((m) => {
+              const f = e[m] || {};
               return {
-                key: p,
-                label: p === "namesrvSpawnLog" ? "NameServer" : "Broker",
+                key: m,
+                label: m === "namesrvSpawnLog" ? "NameServer" : "Broker",
                 children: /* @__PURE__ */ r.jsxs("div", { style: { fontSize: 12 }, children: [
                   /* @__PURE__ */ r.jsxs("div", { children: [
                     /* @__PURE__ */ r.jsx("code", { children: f.path }),
@@ -725,12 +725,12 @@ function Qe() {
         {
           size: "small",
           rowKey: "ep",
-          dataSource: w,
+          dataSource: P,
           columns: Ge,
           pagination: !1
         }
       ),
-      ((P = e == null ? void 0 : e.unavailableOnBroker120) == null ? void 0 : P.length) > 0 && /* @__PURE__ */ r.jsx(
+      ((w = e == null ? void 0 : e.unavailableOnBroker120) == null ? void 0 : w.length) > 0 && /* @__PURE__ */ r.jsx(
         y,
         {
           type: "warning",
@@ -739,9 +739,9 @@ function Qe() {
           message: "以下能力在 z-mq 1.2.0 上根本没有请求码，页面不做也不假做",
           description: /* @__PURE__ */ r.jsxs("div", { children: [
             /* @__PURE__ */ r.jsx("div", { style: { fontWeight: 600, marginTop: 4 }, children: "Broker 侧未注册：" }),
-            /* @__PURE__ */ r.jsx("ul", { style: { margin: "4px 0 0 18px" }, children: e.unavailableOnBroker120.map((p) => /* @__PURE__ */ r.jsx("li", { children: p }, p)) }),
+            /* @__PURE__ */ r.jsx("ul", { style: { margin: "4px 0 0 18px" }, children: e.unavailableOnBroker120.map((m) => /* @__PURE__ */ r.jsx("li", { children: m }, m)) }),
             /* @__PURE__ */ r.jsx("div", { style: { fontWeight: 600, marginTop: 4 }, children: "NameServer 侧未实现：" }),
-            /* @__PURE__ */ r.jsx("ul", { style: { margin: "4px 0 0 18px" }, children: (e.unavailableOnNamesrv120 || []).map((p) => /* @__PURE__ */ r.jsx("li", { children: p }, p)) })
+            /* @__PURE__ */ r.jsx("ul", { style: { margin: "4px 0 0 18px" }, children: (e.unavailableOnNamesrv120 || []).map((m) => /* @__PURE__ */ r.jsx("li", { children: m }, m)) })
           ] })
         }
       )
@@ -793,21 +793,21 @@ const We = [
   }
 ];
 function Je() {
-  const { instance: e, poll: n } = le(), [s, l] = T(null), [o, u] = T(null), [c, m] = T(!1), x = Y(async () => {
-    m(!0);
+  const { instance: e, poll: n } = le(), [s, l] = T(null), [o, u] = T(null), [c, p] = T(!1), x = Y(async () => {
+    p(!0);
     try {
       const a = await V.cluster();
       l(a), u(null);
     } catch (a) {
       l(null), u(a);
     } finally {
-      m(!1);
+      p(!1);
     }
   }, []);
   ne(() => {
     x(), n();
   }, [x, n]);
-  const S = (s == null ? void 0 : s.data) || {}, _ = S.brokerAddrTable && typeof S.brokerAddrTable == "object" ? S.brokerAddrTable : {}, w = S.clusterAddrTable && typeof S.clusterAddrTable == "object" ? S.clusterAddrTable : {}, P = (e == null ? void 0 : e.brokerPort) ?? null, p = Object.keys(_).map((a) => {
+  const S = (s == null ? void 0 : s.data) || {}, _ = S.brokerAddrTable && typeof S.brokerAddrTable == "object" ? S.brokerAddrTable : {}, P = S.clusterAddrTable && typeof S.clusterAddrTable == "object" ? S.clusterAddrTable : {}, w = (e == null ? void 0 : e.brokerPort) ?? null, m = Object.keys(_).map((a) => {
     var F;
     const i = _[a] || {}, h = i.brokerAddrs && typeof i.brokerAddrs == "object" ? i.brokerAddrs : {}, k = Object.keys(h).map((G) => ({ id: G, addr: String(h[G]) })), C = h[0] ? String(h[0]) : ((F = k[0]) == null ? void 0 : F.addr) || null, N = C ? Number(C.split(":").pop()) : null;
     return {
@@ -817,13 +817,13 @@ function Je() {
       masterAddr: C,
       replicas: k,
       port: N,
-      expected: P,
-      portMatched: P == null ? null : N === P
+      expected: w,
+      portMatched: w == null ? null : N === w
     };
-  }), f = Object.keys(w).map((a) => ({
+  }), f = Object.keys(P).map((a) => ({
     key: a,
     cluster: a,
-    members: (Array.isArray(w[a]) ? w[a] : []).map(String)
+    members: (Array.isArray(P[a]) ? P[a] : []).map(String)
   })), D = s && !o ? H(s) : null;
   return /* @__PURE__ */ r.jsxs("div", { children: [
     /* @__PURE__ */ r.jsx(
@@ -851,12 +851,12 @@ function Je() {
       s && !o && /* @__PURE__ */ r.jsxs(r.Fragment, { children: [
         /* @__PURE__ */ r.jsx(K, { res: s }),
         /* @__PURE__ */ r.jsxs(xe, { gutter: 16, style: { marginBottom: 12 }, children: [
-          /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(q, { title: "已注册 Broker 数", value: p.length }) }),
+          /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(q, { title: "已注册 Broker 数", value: m.length }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(q, { title: "Cluster 数", value: f.length }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(q, { title: "请求码", value: `${s.requestCode || "-"} ${s.requestName || ""}` }) }),
           /* @__PURE__ */ r.jsx(A, { span: 6, children: /* @__PURE__ */ r.jsx(q, { title: "往返耗时", value: s.elapsedMs ?? "-", suffix: "ms" }) })
         ] }),
-        p.length === 0 ? /* @__PURE__ */ r.jsx(
+        m.length === 0 ? /* @__PURE__ */ r.jsx(
           oe,
           {
             title: "brokerAddrTable 是空的",
@@ -868,7 +868,7 @@ function Je() {
             size: "small",
             rowKey: "key",
             loading: c,
-            dataSource: p,
+            dataSource: m,
             columns: We,
             pagination: !1
           }
@@ -944,30 +944,30 @@ const He = [
 ];
 function Ke() {
   var se, Q;
-  const { instance: e, poll: n } = le(), [s, l] = T(null), [o, u] = T(null), [c, m] = T(null), [x, S] = T(null), [_, w] = T(!1), [P, p] = T({}), f = Y(async () => {
-    w(!0), m(null), S(null), await Promise.all([
+  const { instance: e, poll: n } = le(), [s, l] = T(null), [o, u] = T(null), [c, p] = T(null), [x, S] = T(null), [_, P] = T(!1), [w, m] = T({}), f = Y(async () => {
+    P(!0), p(null), S(null), await Promise.all([
       V.topics().then(l).catch((j) => {
-        l(null), m(j);
+        l(null), p(j);
       }),
       V.brokerTopics().then(u).catch((j) => {
         u(null), S(j);
       })
-    ]), w(!1), n();
+    ]), P(!1), n();
   }, [n]);
   ne(() => {
     f();
   }, [f]);
   const D = Y(async (j) => {
-    if (!P[j]) {
-      p((R) => ({ ...R, [j]: { loading: !0 } }));
+    if (!w[j]) {
+      m((R) => ({ ...R, [j]: { loading: !0 } }));
       try {
         const R = await V.route(j);
-        p((X) => ({ ...X, [j]: R }));
+        m((X) => ({ ...X, [j]: R }));
       } catch (R) {
-        p((X) => ({ ...X, [j]: { loadError: L(R) } }));
+        m((X) => ({ ...X, [j]: { loadError: L(R) } }));
       }
     }
-  }, [P]), a = s && s.responseCode === 0 && Array.isArray((se = s.data) == null ? void 0 : se.topics) ? s.data.topics.map(String) : null, i = o && o.responseCode === 0 && Array.isArray((Q = o.data) == null ? void 0 : Q.topics) ? o.data.topics.map(String) : null, h = Re(() => {
+  }, [w]), a = s && s.responseCode === 0 && Array.isArray((se = s.data) == null ? void 0 : se.topics) ? s.data.topics.map(String) : null, i = o && o.responseCode === 0 && Array.isArray((Q = o.data) == null ? void 0 : Q.topics) ? o.data.topics.map(String) : null, h = Re(() => {
     const j = /* @__PURE__ */ new Set([...a || [], ...i || []]);
     return Array.from(j).sort().map((R) => ({
       key: R,
@@ -978,13 +978,7 @@ function Ke() {
     }));
   }, [a, i]), k = h.filter((j) => j.onNamesrv && !j.onBroker).length, C = h.filter((j) => !j.onNamesrv && j.onBroker).length, N = s && !c ? H(s) : null, F = o && !x ? H(o) : null, G = !a && !i;
   return /* @__PURE__ */ r.jsxs("div", { children: [
-    /* @__PURE__ */ r.jsx(
-      ie,
-      {
-        title: "Topic 列表",
-        subtitle: "NameServer 码 8 GET_ALL_TOPIC_LIST ∥ Broker 码 8 GET_ALL_TOPIC_LIST → 差集 + 按需码 3 路由详情"
-      }
-    ),
+    /* @__PURE__ */ r.jsx(ie, { title: "Topic 列表" }),
     /* @__PURE__ */ r.jsxs(I, { extra: /* @__PURE__ */ r.jsx($, { children: /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(te, {}), loading: _, onClick: f, children: "刷新" }) }), children: [
       /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
@@ -1057,7 +1051,7 @@ function Ke() {
               onExpand: (j, R) => {
                 j && D(R.topic);
               },
-              expandedRowRender: (j) => /* @__PURE__ */ r.jsx(Xe, { state: P[j.topic] })
+              expandedRowRender: (j) => /* @__PURE__ */ r.jsx(Xe, { state: w[j.topic] })
             }
           }
         )
@@ -1117,11 +1111,11 @@ function Xe({ state: e }) {
         be,
         {
           size: "small",
-          rowKey: (m) => `${m.brokerName}-${m.queueId ?? ""}`,
+          rowKey: (p) => `${p.brokerName}-${p.queueId ?? ""}`,
           dataSource: l,
           pagination: !1,
           columns: [
-            { title: "Broker", dataIndex: "brokerName", key: "brokerName", render: (m) => /* @__PURE__ */ r.jsx("code", { children: m }) },
+            { title: "Broker", dataIndex: "brokerName", key: "brokerName", render: (p) => /* @__PURE__ */ r.jsx("code", { children: p }) },
             { title: "readQueueNums", dataIndex: "readQueueNums", key: "readQueueNums" },
             { title: "writeQueueNums", dataIndex: "writeQueueNums", key: "writeQueueNums" },
             { title: "perm", dataIndex: "perm", key: "perm" },
@@ -1131,12 +1125,12 @@ function Xe({ state: e }) {
       ),
       o.length > 0 && /* @__PURE__ */ r.jsxs("div", { style: { marginTop: 8, color: "#64748b", fontSize: 12 }, children: [
         "brokerDatas：",
-        o.map((m) => `${m.brokerName}→${JSON.stringify(m.brokerAddrs || {})}`).join("，")
+        o.map((p) => `${p.brokerName}→${JSON.stringify(p.brokerAddrs || {})}`).join("，")
       ] })
     ] })
   ] });
 }
-const we = [
+const Pe = [
   { key: "topicConfig", path: "broker/topic-config", label: "Topic 配置（码 320）", api: "brokerTopicConfig" },
   { key: "consumerOffset", path: "broker/consumer-offset", label: "消费位点（码 321）", api: "brokerConsumerOffset" },
   { key: "delayOffset", path: "broker/delay-offset", label: "延迟位点（码 322）", api: "brokerDelayOffset" },
@@ -1157,16 +1151,16 @@ const we = [
   { title: "unit", dataIndex: "unit", key: "unit", width: 110, render: (e) => e ?? "—" }
 ];
 function er() {
-  const { instance: e, poll: n } = le(), [s, l] = T([]), [o, u] = T(null), [c, m] = T(null), [x, S] = T({}), [_, w] = T(!1), P = Y(async () => {
+  const { instance: e, poll: n } = le(), [s, l] = T([]), [o, u] = T(null), [c, p] = T(null), [x, S] = T({}), [_, P] = T(!1), w = Y(async () => {
     var a;
     try {
       const i = await V.cluster(), h = ((a = i == null ? void 0 : i.data) == null ? void 0 : a.brokerAddrTable) || {}, k = Object.keys(h);
-      return l(k), u((C) => C && k.includes(C) ? C : k[0] || null), m(i && i.responseCode !== 0 ? new Error(H(i) || "码 4 返回非 0") : null), k;
+      return l(k), u((C) => C && k.includes(C) ? C : k[0] || null), p(i && i.responseCode !== 0 ? new Error(H(i) || "码 4 返回非 0") : null), k;
     } catch (i) {
-      return l([]), u(null), m(i), [];
+      return l([]), u(null), p(i), [];
     }
-  }, []), p = Y(async (a) => {
-    w(!0), await Promise.all(we.map(async (i) => {
+  }, []), m = Y(async (a) => {
+    P(!0), await Promise.all(Pe.map(async (i) => {
       S((h) => ({ ...h, [i.key]: { loading: !0 } }));
       try {
         const h = await V[i.api](a || void 0);
@@ -1174,13 +1168,13 @@ function er() {
       } catch (h) {
         S((k) => ({ ...k, [i.key]: { loadError: L(h), raw: h } }));
       }
-    })), w(!1), n();
+    })), P(!1), n();
   }, [n]);
   ne(() => {
-    P();
-  }, [P]), ne(() => {
-    p(o || void 0);
-  }, [o, p]);
+    w();
+  }, [w]), ne(() => {
+    m(o || void 0);
+  }, [o, m]);
   const f = (a) => {
     var h;
     const i = (h = a == null ? void 0 : a.data) == null ? void 0 : h.offsetTable;
@@ -1219,7 +1213,7 @@ function er() {
           options: s.map((a) => ({ value: a, label: a }))
         }
       ),
-      /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(te, {}), loading: _, onClick: () => p(o || void 0), children: "刷新五档" })
+      /* @__PURE__ */ r.jsx(z, { icon: /* @__PURE__ */ r.jsx(te, {}), loading: _, onClick: () => m(o || void 0), children: "刷新五档" })
     ] }), children: [
       /* @__PURE__ */ r.jsx(ce, { data: e }),
       /* @__PURE__ */ r.jsx(de, { data: e }),
@@ -1246,7 +1240,7 @@ function er() {
         ) })
       ] })
     ] }),
-    we.map((a) => /* @__PURE__ */ r.jsx(
+    Pe.map((a) => /* @__PURE__ */ r.jsx(
       rr,
       {
         section: a,
@@ -1297,7 +1291,7 @@ function rr({ section: e, state: n, rows: s }) {
           {
             rows: s,
             columns: [
-              { title: "Topic", dataIndex: "topic", key: "topic", render: (m) => /* @__PURE__ */ r.jsx("code", { children: m }) },
+              { title: "Topic", dataIndex: "topic", key: "topic", render: (p) => /* @__PURE__ */ r.jsx("code", { children: p }) },
               { title: "queueId", dataIndex: "queueId", key: "queueId", width: 110 },
               { title: "maxOffset", dataIndex: "maxOffset", key: "maxOffset", width: 140 }
             ],
@@ -1327,10 +1321,10 @@ function rr({ section: e, state: n, rows: s }) {
             bordered: !0,
             size: "small",
             column: 1,
-            items: Object.keys(c).map((m) => ({
-              key: m,
-              label: m,
-              children: Se(c[m])
+            items: Object.keys(c).map((p) => ({
+              key: p,
+              label: p,
+              children: Se(c[p])
             }))
           }
         ),
@@ -1342,7 +1336,7 @@ function rr({ section: e, state: n, rows: s }) {
     }
   );
 }
-function pr() {
+function mr() {
   return /* @__PURE__ */ r.jsxs(Ie, { children: [
     /* @__PURE__ */ r.jsx(Z, { index: !0, element: /* @__PURE__ */ r.jsx(Ae, { to: "instance", replace: !0 }) }),
     /* @__PURE__ */ r.jsx(Z, { path: "instance", element: /* @__PURE__ */ r.jsx(Qe, {}) }),
@@ -1358,8 +1352,8 @@ function fr() {
 export {
   fr as C,
   $e as K,
-  pr as M,
-  mr as T,
+  mr as M,
+  pr as T,
   he as Z,
   ur as a,
   dr as b,

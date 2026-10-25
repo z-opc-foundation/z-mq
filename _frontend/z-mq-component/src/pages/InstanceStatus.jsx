@@ -271,7 +271,7 @@ export default function InstanceStatus() {
 
             <Card title="本代理可达的只读请求码（穷举，无通用转发口）" style={{marginTop: 16}}>
                 <Table size="small" rowKey="ep" dataSource={codeRows} columns={CODE_COLUMNS}
-                       pagination={false}/>
+                       pagination={false /* §2 规则 2 豁免：只读请求码是协议里穷举出来的固定常量集合（卡片标题即「穷举」），行数不随业务增长 */}/>
                 {instance?.unavailableOnBroker120?.length > 0 && (
                     <Alert type="warning" showIcon style={{marginTop: 12}}
                            message="以下能力在 z-mq 1.2.0 上根本没有请求码，页面不做也不假做"
