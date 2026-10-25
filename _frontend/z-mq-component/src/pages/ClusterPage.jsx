@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from 'react'
-import {Alert, Button, Card, Col, Descriptions, Row, Space, Statistic, Table, Tag} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Input, Row, Space, Statistic, Table, Tag} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, mqUpstreamErrorText} from '../services/api'
 import {useInstance} from '../services/useInstance'
@@ -98,6 +98,11 @@ export default function ClusterPage() {
         key: c, cluster: c, members: (Array.isArray(clusterTable[c]) ? clusterTable[c] : []).map(String),
     }))
 
+    const [keyword, setKeyword] = useState('')
+    const filteredRows = keyword.trim()
+        ? rows.filter((r) => `${r.brokerName || ''} ${r.cluster || ''} ${r.masterAddr || ''}`.toLowerCase().includes(keyword.trim().toLowerCase()))
+        : rows
+
     const upstreamErr = res && !error ? mqUpstreamErrorText(res) : null
 
     return (
@@ -105,6 +110,8 @@ export default function ClusterPage() {
             <PageHeader title="集群与 Broker"
                         subtitle="NameServer 码 4 GET_BROKER_CLUSTER_INFO → brokerAddrTable / clusterAddrTable"/>
             <Card extra={<Space>
+                <Input.Search allowClear placeholder="按 Broker 名 / Cluster / Master 地址过滤" style={{width: 240}}
+                              onChange={(e) => setKeyword(e.target.value)}/>
                 <Button icon={<ReloadOutlined/>} loading={loading} onClick={() => { load(); poll() }}>刷新</Button>
             </Space>}>
                 <ForeignListenerBanner data={instance}/>
@@ -130,7 +137,7 @@ export default function ClusterPage() {
                                         description="没有任何 broker 向这台 NameServer 发过 REGISTER_BROKER（码 1）。两种成因要分开：① broker 子进程没起 / 没 bind 上（看顶部红条与「实例与端口」页的 bind 原文）；② broker 起了但配的 zmq.namesrv-addr 指向的是另一台 NameServer。本页不给「注册 broker」按钮 —— 那是写面，另立卡。"/>
                         ) : (
                             <Table size="small" rowKey="key" loading={loading}
-                                   dataSource={rows} columns={BROKER_COLUMNS} pagination={false /* §2 规则 2 豁免：brokerAddrTable 是 broker 向本 NameServer 的注册记录，一个集群内 broker 数量有界，不随业务增长 */}/>
+                                   dataSource={filteredRows} columns={BROKER_COLUMNS} pagination={false /* §2 规则 2 豁免：brokerAddrTable 是 broker 向本 NameServer 的注册记录，一个集群内 broker 数量有界，不随业务增长 */}/>
                         )}
                     </>
                 )}

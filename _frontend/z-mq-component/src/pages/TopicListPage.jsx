@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {Alert, Button, Card, Col, Descriptions, Row, Space, Statistic, Table, Tag} from 'antd'
+import {Alert, Button, Card, Col, Descriptions, Input, Row, Space, Statistic, Table, Tag} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, mqUpstreamErrorText, routeNotExistRemark} from '../services/api'
 import {useInstance} from '../services/useInstance'
@@ -175,6 +175,7 @@ export default function TopicListPage() {
 }
 
 function RouteDetail({state}) {
+    const [keyword, setKeyword] = useState('')
     if (!state) return <span style={{color: '#94a3b8', fontSize: 12}}>展开时向 NameServer 发送码 3 GET_ROUTEINFO_BY_TOPIC。</span>
     if (state.loading) return <span style={{color: '#94a3b8', fontSize: 12}}>查询中…</span>
     if (state.loadError) return <Alert type="error" showIcon message={`路由查询失败：${state.loadError}`}/>
@@ -182,6 +183,9 @@ function RouteDetail({state}) {
     const upstreamErr = mqUpstreamErrorText(state)
     const queues = Array.isArray(state.data?.queueDatas) ? state.data.queueDatas : []
     const brokerDatas = Array.isArray(state.data?.brokerDatas) ? state.data.brokerDatas : []
+    const filteredQueues = keyword.trim()
+        ? queues.filter((q) => `${q.brokerName || ''} ${q.perm ?? ''} ${q.topicSysFlag ?? ''}`.toLowerCase().includes(keyword.trim().toLowerCase()))
+        : queues
     return (
         <div>
             {notExist && <Alert type="warning" showIcon style={{marginBottom: 8}}
@@ -197,7 +201,12 @@ function RouteDetail({state}) {
                                       {key: 'order', label: 'order', children: String(state.data.order ?? '-')},
                                       {key: 'elapsed', label: '往返', children: `${state.elapsedMs ?? '-'} ms`},
                                   ]}/>
-                    <Table size="small" rowKey={(r) => `${r.brokerName}-${r.queueId ?? ''}`} dataSource={queues}
+                    {/* 子表没有独立的 Card 包裹（它在展开行里），查询框直接放在表格正上方 */}
+                    <Space style={{marginBottom: 8}}>
+                        <Input.Search allowClear placeholder="按 Broker / perm / topicSysFlag 过滤" style={{width: 220}}
+                                      onChange={(e) => setKeyword(e.target.value)}/>
+                    </Space>
+                    <Table size="small" rowKey={(r) => `${r.brokerName}-${r.queueId ?? ''}`} dataSource={filteredQueues}
                            pagination={false /* §2 规则 2 豁免：队列明细是抽屉里按 topic 展开的子表，行数由该 topic 的队列数决定，分页会把同一 topic 的队列拆散 */}
                            columns={[
                                {title: 'Broker', dataIndex: 'brokerName', key: 'brokerName', render: (v) => <code>{v}</code>},

@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from 'react'
-import {Alert, Button, Card, Descriptions, Space, Table, Tag} from 'antd'
+import {Alert, Button, Card, Descriptions, Input, Space, Table, Tag} from 'antd'
 import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, ZMQ_CODE} from '../services/api'
 import {useInstance} from '../services/useInstance'
@@ -88,6 +88,11 @@ export default function InstanceStatus() {
             key: ep,
         }))
         : []
+
+    const [keyword, setKeyword] = useState('')
+    const filteredCodeRows = keyword.trim()
+        ? codeRows.filter((r) => `${r.ep || ''} ${r.code || ''} ${r.name || ''}`.toLowerCase().includes(keyword.trim().toLowerCase()))
+        : codeRows
 
     return (
         <div>
@@ -269,8 +274,12 @@ export default function InstanceStatus() {
                 </Space>
             </Card>
 
-            <Card title="本代理可达的只读请求码（穷举，无通用转发口）" style={{marginTop: 16}}>
-                <Table size="small" rowKey="ep" dataSource={codeRows} columns={CODE_COLUMNS}
+            <Card title="本代理可达的只读请求码（穷举，无通用转发口）" style={{marginTop: 16}}
+                  extra={<Space>
+                      <Input.Search allowClear placeholder="按逻辑端点 / 请求码 / 常量名过滤" style={{width: 240}}
+                                    onChange={(e) => setKeyword(e.target.value)}/>
+                  </Space>}>
+                <Table size="small" rowKey="ep" dataSource={filteredCodeRows} columns={CODE_COLUMNS}
                        pagination={false /* §2 规则 2 豁免：只读请求码是协议里穷举出来的固定常量集合（卡片标题即「穷举」），行数不随业务增长 */}/>
                 {instance?.unavailableOnBroker120?.length > 0 && (
                     <Alert type="warning" showIcon style={{marginTop: 12}}
