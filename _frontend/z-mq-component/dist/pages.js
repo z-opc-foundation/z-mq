@@ -1,10 +1,10 @@
 import { j as e, m as w, C as O, M as A } from "./ComponentDoc-DnVYPAdH.js";
-import { ReloadOutlined as q, UserOutlined as P, LockOutlined as B, HomeOutlined as E, DashboardOutlined as L, AppstoreOutlined as R, ReadOutlined as N } from "@ant-design/icons";
+import { ReloadOutlined as T, UserOutlined as B, LockOutlined as E, HomeOutlined as L, DashboardOutlined as P, AppstoreOutlined as R, ReadOutlined as N } from "@ant-design/icons";
 import { useState as a, useEffect as b } from "react";
-import { Typography as u, Space as f, Button as k, Alert as T, Spin as $, Row as C, Col as x, Card as c, Statistic as j, Descriptions as v, Tag as D, Form as p, Input as z, message as I } from "antd";
-import { ListTable as J } from "@yuku123/z-frontend-common/ui";
-import { useNavigate as M } from "react-router-dom";
-const { Title: W, Paragraph: F } = u;
+import { Typography as u, Space as p, Button as k, Alert as C, Spin as D, Row as q, Col as f, Card as c, Statistic as j, Descriptions as v, Tag as J, Form as x, Input as z, message as I } from "antd";
+import { ListTable as M } from "@yuku123/z-frontend-common/ui";
+import { useNavigate as W } from "react-router-dom";
+const { Title: F } = u;
 function H() {
   const [s, r] = a(null), [o, l] = a(!1), [n, h] = a(null), d = async () => {
     l(!0);
@@ -21,19 +21,18 @@ function H() {
     const i = setInterval(d, 15e3);
     return () => clearInterval(i);
   }, []), /* @__PURE__ */ e.jsxs("div", { children: [
-    /* @__PURE__ */ e.jsxs(f, { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ e.jsx(W, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
-      /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(q, {}), onClick: d, loading: o, children: "刷新" }),
+    /* @__PURE__ */ e.jsxs(p, { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ e.jsx(F, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
+      /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(T, {}), onClick: d, loading: o, children: "刷新" }),
       /* @__PURE__ */ e.jsx(u.Text, { type: "secondary", children: "15s 自动刷新" })
     ] }),
-    /* @__PURE__ */ e.jsx(F, { type: "secondary", children: "/mq/__instance 自省：自省接口通不通 / 内嵌 broker bind 没上 / 端口属主是谁 / bind 失败原文，四件事拆开答。" }),
-    n && /* @__PURE__ */ e.jsx(T, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
-    o && !s && /* @__PURE__ */ e.jsx($, {}),
+    n && /* @__PURE__ */ e.jsx(C, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    o && !s && /* @__PURE__ */ e.jsx(D, {}),
     s && /* @__PURE__ */ e.jsxs(e.Fragment, { children: [
-      /* @__PURE__ */ e.jsxs(C, { gutter: 16, style: { marginBottom: 16 }, children: [
-        /* @__PURE__ */ e.jsx(x, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "nameserver 存活", value: s.nameserverAlive ? "是" : "否" }) }) }),
-        /* @__PURE__ */ e.jsx(x, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "broker 存活", value: s.brokerAlive ? "是" : "否" }) }) }),
-        /* @__PURE__ */ e.jsx(x, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(
+      /* @__PURE__ */ e.jsxs(q, { gutter: 16, style: { marginBottom: 16 }, children: [
+        /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "nameserver 存活", value: s.nameserverAlive ? "是" : "否" }) }) }),
+        /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "broker 存活", value: s.brokerAlive ? "是" : "否" }) }) }),
+        /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(
           j,
           {
             title: "bind 状态",
@@ -46,8 +45,8 @@ function H() {
     ] })
   ] });
 }
-const { Title: K, Paragraph: U } = u;
-function _() {
+const { Title: K } = u;
+function U() {
   const [s, r] = a([]), [o, l] = a(!1), [n, h] = a(null), d = async () => {
     l(!0);
     try {
@@ -70,11 +69,10 @@ function _() {
     render: (g) => typeof g == "object" ? JSON.stringify(g) : String(g ?? "—")
   }));
   return /* @__PURE__ */ e.jsxs("div", { children: [
-    /* @__PURE__ */ e.jsx(f, { style: { marginBottom: 16 }, children: /* @__PURE__ */ e.jsx(K, { level: 4, style: { margin: 0 }, children: "Topic 清单" }) }),
-    /* @__PURE__ */ e.jsx(U, { type: "secondary", children: "集群当前所有 topic（/mq/topics，从 broker 侧拉取）。" }),
-    n && /* @__PURE__ */ e.jsx(T, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    /* @__PURE__ */ e.jsx(p, { style: { marginBottom: 16 }, children: /* @__PURE__ */ e.jsx(K, { level: 4, style: { margin: 0 }, children: "Topic 清单" }) }),
+    n && /* @__PURE__ */ e.jsx(C, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
     /* @__PURE__ */ e.jsx(
-      J,
+      M,
       {
         rows: s,
         columns: i.length ? i : [{ title: "name", dataIndex: "name" }],
@@ -82,14 +80,14 @@ function _() {
         loading: o && !s.length,
         searchKeys: "name",
         searchPlaceholder: "按 topic 名过滤",
-        cardExtra: /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(q, {}), onClick: d, loading: o, children: "刷新" })
+        cardExtra: /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(T, {}), onClick: d, loading: o, children: "刷新" })
       }
     )
   ] });
 }
-const { Title: G, Paragraph: Q } = u;
-function V() {
-  const s = M(), [r, o] = a(null);
+const { Title: $, Paragraph: _ } = u;
+function G() {
+  const s = W(), [r, o] = a(null);
   b(() => {
     const n = localStorage.getItem("userInfo");
     if (n)
@@ -99,17 +97,17 @@ function V() {
         o({ name: n });
       }
   }, []);
-  const l = X.filter((n) => n.key !== "/z-mq/home");
+  const l = Q.filter((n) => n.key !== "/z-mq/home");
   return /* @__PURE__ */ e.jsxs("div", { children: [
-    /* @__PURE__ */ e.jsx(c, { style: { marginBottom: 16, background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)", border: "none" }, children: /* @__PURE__ */ e.jsxs(f, { direction: "vertical", size: 4, style: { color: "#fff" }, children: [
-      /* @__PURE__ */ e.jsxs(G, { level: 3, style: { color: "#fff", margin: 0 }, children: [
+    /* @__PURE__ */ e.jsx(c, { style: { marginBottom: 16, background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)", border: "none" }, children: /* @__PURE__ */ e.jsxs(p, { direction: "vertical", size: 4, style: { color: "#fff" }, children: [
+      /* @__PURE__ */ e.jsxs($, { level: 3, style: { color: "#fff", margin: 0 }, children: [
         "欢迎",
         r != null && r.name ? `，${r.name}` : ""
       ] }),
-      /* @__PURE__ */ e.jsx(Q, { style: { color: "rgba(255,255,255,0.85)", margin: 0 }, children: "z-mq 消息队列 管理台" }),
-      (r == null ? void 0 : r.role) && /* @__PURE__ */ e.jsx(D, { style: { marginTop: 8, background: "rgba(255,255,255,0.2)", color: "#fff", border: "none" }, children: r.role })
+      /* @__PURE__ */ e.jsx(_, { style: { color: "rgba(255,255,255,0.85)", margin: 0 }, children: "z-mq 消息队列 管理台" }),
+      (r == null ? void 0 : r.role) && /* @__PURE__ */ e.jsx(J, { style: { marginTop: 8, background: "rgba(255,255,255,0.2)", color: "#fff", border: "none" }, children: r.role })
     ] }) }),
-    /* @__PURE__ */ e.jsx(C, { gutter: [16, 16], children: l.map((n) => /* @__PURE__ */ e.jsx(x, { xs: 24, sm: 12, md: 12, lg: 8, children: /* @__PURE__ */ e.jsx(c, { hoverable: !0, onClick: () => s(n.key), style: { borderTop: "3px solid #7c3aed" }, children: /* @__PURE__ */ e.jsxs(f, { align: "start", size: 12, children: [
+    /* @__PURE__ */ e.jsx(q, { gutter: [16, 16], children: l.map((n) => /* @__PURE__ */ e.jsx(f, { xs: 24, sm: 12, md: 12, lg: 8, children: /* @__PURE__ */ e.jsx(c, { hoverable: !0, onClick: () => s(n.key), style: { borderTop: "3px solid #7c3aed" }, children: /* @__PURE__ */ e.jsxs(p, { align: "start", size: 12, children: [
       /* @__PURE__ */ e.jsx("div", { style: {
         width: 44,
         height: 44,
@@ -130,7 +128,7 @@ function V() {
   ] });
 }
 const m = { username: "admin", password: "123456", user: { name: "admin", role: "管理员" } };
-function se() {
+function ne() {
   const [s, r] = a(!1), o = async (l) => {
     r(!0);
     try {
@@ -162,10 +160,10 @@ function se() {
       }, children: "z" }),
       /* @__PURE__ */ e.jsx("div", { style: { fontSize: 18, fontWeight: 600, color: "#0f172a" }, children: "z-mq 管理台" })
     ] }),
-    /* @__PURE__ */ e.jsxs(p, { onFinish: o, size: "large", children: [
-      /* @__PURE__ */ e.jsx(p.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(z, { prefix: /* @__PURE__ */ e.jsx(P, {}), placeholder: "用户名" }) }),
-      /* @__PURE__ */ e.jsx(p.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(z.Password, { prefix: /* @__PURE__ */ e.jsx(B, {}), placeholder: "密码" }) }),
-      /* @__PURE__ */ e.jsx(p.Item, { style: { marginBottom: 8 }, children: /* @__PURE__ */ e.jsx(
+    /* @__PURE__ */ e.jsxs(x, { onFinish: o, size: "large", children: [
+      /* @__PURE__ */ e.jsx(x.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(z, { prefix: /* @__PURE__ */ e.jsx(B, {}), placeholder: "用户名" }) }),
+      /* @__PURE__ */ e.jsx(x.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(z.Password, { prefix: /* @__PURE__ */ e.jsx(E, {}), placeholder: "密码" }) }),
+      /* @__PURE__ */ e.jsx(x.Item, { style: { marginBottom: 8 }, children: /* @__PURE__ */ e.jsx(
         k,
         {
           type: "primary",
@@ -185,24 +183,24 @@ function se() {
     ] })
   ] }) });
 }
-const X = [
-  { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ e.jsx(E, {}) },
-  { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ e.jsx(L, {}) },
+const Q = [
+  { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ e.jsx(L, {}) },
+  { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ e.jsx(P, {}) },
   { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ e.jsx(R, {}) },
   { key: "/z-mq/docs", label: "组件文档", icon: /* @__PURE__ */ e.jsx(N, {}) }
-], ie = [
-  { path: "/z-mq/home", Component: V },
+], re = [
+  { path: "/z-mq/home", Component: G },
   { path: "/z-mq/instance", Component: H },
-  { path: "/z-mq/topics", Component: _ },
+  { path: "/z-mq/topics", Component: U },
   { path: "/z-mq/docs", Component: O },
   { path: "/z-mq/:rest*", Component: A }
 ];
 export {
   O as ComponentDocPage,
-  V as HomePage,
+  G as HomePage,
   H as Instance,
-  se as LoginPage,
-  _ as Topics,
-  X as menuItems,
-  ie as routes
+  ne as LoginPage,
+  U as Topics,
+  Q as menuItems,
+  re as routes
 };
