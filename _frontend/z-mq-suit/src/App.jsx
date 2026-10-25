@@ -26,8 +26,16 @@ function NotFound() {
 }
 
 // lead 008 §16：CTC/SSO 接入前的 mock 登录（账号由构建期 VITE_MOCK_USER / VITE_MOCK_PASSWORD 注入）
+const MOCK_AUTH = import.meta.env.VITE_MOCK_USER && import.meta.env.VITE_MOCK_PASSWORD
+    ? {
+        username: import.meta.env.VITE_MOCK_USER,
+        password: import.meta.env.VITE_MOCK_PASSWORD,
+        user: { name: import.meta.env.VITE_MOCK_USER, role: '管理员' },
+    }
+    : null
+
 function LoginRoute() {
-    return <LoginPage />
+    return <LoginPage mockAuth={MOCK_AUTH} />
 }
 
 function ProtectedShell() {

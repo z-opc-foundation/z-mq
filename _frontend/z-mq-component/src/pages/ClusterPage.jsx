@@ -107,8 +107,7 @@ export default function ClusterPage() {
 
     return (
         <div>
-            <PageHeader title="集群与 Broker"
-                        subtitle="NameServer 码 4 GET_BROKER_CLUSTER_INFO → brokerAddrTable / clusterAddrTable"/>
+            <PageHeader title="集群与 Broker"/>
             <Card extra={<Space>
                 <Input.Search allowClear placeholder="按 Broker 名 / Cluster / Master 地址过滤" style={{width: 240}}
                               onChange={(e) => setKeyword(e.target.value)}/>
@@ -156,6 +155,7 @@ export default function ClusterPage() {
 
             <Card title="上游语义提示" style={{marginTop: 16}}>
                 <div style={{color: '#64748b', fontSize: 12, lineHeight: 1.9}}>
+                    <div>· 数据来自 NameServer 码 4 <code>GET_BROKER_CLUSTER_INFO</code>（brokerAddrTable / clusterAddrTable）。</div>
                     <div>· <code>brokerAddrTable</code> 记的是「谁发过 REGISTER_BROKER 心跳」，不是「谁在跑」。进程活着但心跳线程没起 ⇒ 这里为空。</div>
                     <div>· 上表最后一列是本页自带的第二重归属校验：注册的 broker 端口应当等于
                         <code>zmq.broker-port</code>。不等就说明<b>这台 NameServer 记的是另一套集群</b>，

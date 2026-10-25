@@ -96,8 +96,7 @@ export default function InstanceStatus() {
 
     return (
         <div>
-            <PageHeader title="实例与端口"
-                        subtitle="自省接口 GET /api/mq/__instance（由 MqProxyController 自己应答，不经过 z-mq）+ 只读请求码实发探针"/>
+            <PageHeader title="实例与端口"/>
             <Card extra={<Space>
                 <Button icon={<ReloadOutlined/>} loading={probing} onClick={() => runProbe('cluster')}>实发一发 码4 GET_BROKER_CLUSTER_INFO</Button>
                 <Button icon={<ReloadOutlined/>} onClick={poll}>刷新自省</Button>
@@ -196,6 +195,9 @@ export default function InstanceStatus() {
                         {instance?.surfaceNote && (
                             <div style={{marginTop: 12, color: '#64748b', fontSize: 12}}>{instance.surfaceNote}</div>
                         )}
+                        <div style={{marginTop: 12, color: '#64748b', fontSize: 12}}>
+                            · 自省接口 <code>GET /api/mq/__instance</code>（由 MqProxyController 自己应答，不经过 z-mq）+ 只读请求码实发探针。
+                        </div>
                     </>
                 )}
             </Card>
