@@ -1,35 +1,35 @@
-import { j as e, m as w, C as O, M as A } from "./ComponentDoc-DnVYPAdH.js";
-import { ReloadOutlined as T, UserOutlined as B, LockOutlined as E, HomeOutlined as L, DashboardOutlined as P, AppstoreOutlined as R, ReadOutlined as N } from "@ant-design/icons";
-import { useState as a, useEffect as b } from "react";
-import { Typography as u, Space as p, Button as k, Alert as C, Spin as D, Row as q, Col as f, Card as c, Statistic as j, Descriptions as v, Tag as J, Form as x, Input as z, message as I } from "antd";
-import { ListTable as M } from "@yuku123/z-frontend-common/ui";
+import { j as e, m as T, C as q, M as A } from "./ComponentDoc-DnVYPAdH.js";
+import { ReloadOutlined as C, UserOutlined as E, LockOutlined as R, HomeOutlined as B, DashboardOutlined as _, AppstoreOutlined as M, ReadOutlined as P } from "@ant-design/icons";
+import { useState as a, useEffect as S } from "react";
+import { Typography as u, Space as p, Button as k, Alert as O, Spin as K, Row as w, Col as f, Card as c, Statistic as j, Descriptions as I, Tag as D, Form as x, Input as z, message as b } from "antd";
+import { ListTable as L } from "@yuku123/z-frontend-common/ui";
 import { useNavigate as W } from "react-router-dom";
-const { Title: F } = u;
-function H() {
-  const [s, r] = a(null), [o, l] = a(!1), [n, h] = a(null), d = async () => {
+const { Title: N } = u;
+function U() {
+  const [s, r] = a(null), [i, l] = a(!1), [n, h] = a(null), d = async () => {
     l(!0);
     try {
-      r(await w.instance()), h(null);
-    } catch (i) {
-      h((i == null ? void 0 : i.message) || String(i)), r(null);
+      r(await T.instance()), h(null);
+    } catch (o) {
+      h((o == null ? void 0 : o.message) || String(o)), r(null);
     } finally {
       l(!1);
     }
   };
-  return b(() => {
+  return S(() => {
     d();
-    const i = setInterval(d, 15e3);
-    return () => clearInterval(i);
+    const o = setInterval(d, 15e3);
+    return () => clearInterval(o);
   }, []), /* @__PURE__ */ e.jsxs("div", { children: [
     /* @__PURE__ */ e.jsxs(p, { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ e.jsx(F, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
-      /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(T, {}), onClick: d, loading: o, children: "刷新" }),
+      /* @__PURE__ */ e.jsx(N, { level: 4, style: { margin: 0 }, children: "实例与端口" }),
+      /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(C, {}), onClick: d, loading: i, children: "刷新" }),
       /* @__PURE__ */ e.jsx(u.Text, { type: "secondary", children: "15s 自动刷新" })
     ] }),
-    n && /* @__PURE__ */ e.jsx(C, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
-    o && !s && /* @__PURE__ */ e.jsx(D, {}),
+    n && /* @__PURE__ */ e.jsx(O, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    i && !s && /* @__PURE__ */ e.jsx(K, {}),
     s && /* @__PURE__ */ e.jsxs(e.Fragment, { children: [
-      /* @__PURE__ */ e.jsxs(q, { gutter: 16, style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ e.jsxs(w, { gutter: 16, style: { marginBottom: 16 }, children: [
         /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "nameserver 存活", value: s.nameserverAlive ? "是" : "否" }) }) }),
         /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(j, { title: "broker 存活", value: s.brokerAlive ? "是" : "否" }) }) }),
         /* @__PURE__ */ e.jsx(f, { span: 8, children: /* @__PURE__ */ e.jsx(c, { children: /* @__PURE__ */ e.jsx(
@@ -41,27 +41,27 @@ function H() {
           }
         ) }) })
       ] }),
-      /* @__PURE__ */ e.jsx(c, { title: "实例详情", children: /* @__PURE__ */ e.jsx(v, { column: 2, bordered: !0, size: "small", children: Object.entries(s).filter(([i]) => !["bindError"].includes(i)).map(([i, t]) => /* @__PURE__ */ e.jsx(v.Item, { label: i, children: typeof t == "object" ? JSON.stringify(t) : String(t) }, i)) }) })
+      /* @__PURE__ */ e.jsx(c, { title: "实例详情", children: /* @__PURE__ */ e.jsx(I, { column: 2, bordered: !0, size: "small", children: Object.entries(s).filter(([o]) => !["bindError"].includes(o)).map(([o, t]) => /* @__PURE__ */ e.jsx(I.Item, { label: o, children: typeof t == "object" ? JSON.stringify(t) : String(t) }, o)) }) })
     ] })
   ] });
 }
-const { Title: K } = u;
-function U() {
-  const [s, r] = a([]), [o, l] = a(!1), [n, h] = a(null), d = async () => {
+const { Title: J } = u;
+function V() {
+  const [s, r] = a([]), [i, l] = a(!1), [n, h] = a(null), d = async () => {
     l(!0);
     try {
-      const t = await w.topics(), g = Array.isArray(t) ? t : (t == null ? void 0 : t.topics) || [];
-      r(g.map((y, S) => typeof y == "string" ? { key: S, name: y } : { key: S, ...y })), h(null);
+      const t = await T.topics(), g = Array.isArray(t) ? t : (t == null ? void 0 : t.topics) || [];
+      r(g.map((y, v) => typeof y == "string" ? { key: v, name: y } : { key: v, ...y })), h(null);
     } catch (t) {
       h((t == null ? void 0 : t.message) || String(t));
     } finally {
       l(!1);
     }
   };
-  b(() => {
+  S(() => {
     d();
   }, []);
-  const i = Object.keys(s[0] || { name: "" }).map((t) => ({
+  const o = Object.keys(s[0] || { name: "" }).map((t) => ({
     title: t,
     dataIndex: t,
     key: t,
@@ -69,45 +69,45 @@ function U() {
     render: (g) => typeof g == "object" ? JSON.stringify(g) : String(g ?? "—")
   }));
   return /* @__PURE__ */ e.jsxs("div", { children: [
-    /* @__PURE__ */ e.jsx(p, { style: { marginBottom: 16 }, children: /* @__PURE__ */ e.jsx(K, { level: 4, style: { margin: 0 }, children: "Topic 清单" }) }),
-    n && /* @__PURE__ */ e.jsx(C, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
+    /* @__PURE__ */ e.jsx(p, { style: { marginBottom: 16 }, children: /* @__PURE__ */ e.jsx(J, { level: 4, style: { margin: 0 }, children: "Topic 清单" }) }),
+    n && /* @__PURE__ */ e.jsx(O, { type: "error", showIcon: !0, style: { marginBottom: 16 }, message: "后端未连接", description: n }),
     /* @__PURE__ */ e.jsx(
-      M,
+      L,
       {
         rows: s,
-        columns: i.length ? i : [{ title: "name", dataIndex: "name" }],
+        columns: o.length ? o : [{ title: "name", dataIndex: "name" }],
         rowKey: "key",
-        loading: o && !s.length,
+        loading: i && !s.length,
         searchKeys: "name",
         searchPlaceholder: "按 topic 名过滤",
-        cardExtra: /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(T, {}), onClick: d, loading: o, children: "刷新" })
+        cardExtra: /* @__PURE__ */ e.jsx(k, { icon: /* @__PURE__ */ e.jsx(C, {}), onClick: d, loading: i, children: "刷新" })
       }
     )
   ] });
 }
-const { Title: $, Paragraph: _ } = u;
-function G() {
-  const s = W(), [r, o] = a(null);
-  b(() => {
+const { Title: F, Paragraph: H } = u;
+function $() {
+  const s = W(), [r, i] = a(null);
+  S(() => {
     const n = localStorage.getItem("userInfo");
     if (n)
       try {
-        o(JSON.parse(n));
+        i(JSON.parse(n));
       } catch {
-        o({ name: n });
+        i({ name: n });
       }
   }, []);
-  const l = Q.filter((n) => n.key !== "/z-mq/home");
+  const l = G.filter((n) => n.key !== "/z-mq/home");
   return /* @__PURE__ */ e.jsxs("div", { children: [
     /* @__PURE__ */ e.jsx(c, { style: { marginBottom: 16, background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)", border: "none" }, children: /* @__PURE__ */ e.jsxs(p, { direction: "vertical", size: 4, style: { color: "#fff" }, children: [
-      /* @__PURE__ */ e.jsxs($, { level: 3, style: { color: "#fff", margin: 0 }, children: [
+      /* @__PURE__ */ e.jsxs(F, { level: 3, style: { color: "#fff", margin: 0 }, children: [
         "欢迎",
         r != null && r.name ? `，${r.name}` : ""
       ] }),
-      /* @__PURE__ */ e.jsx(_, { style: { color: "rgba(255,255,255,0.85)", margin: 0 }, children: "z-mq 消息队列 管理台" }),
-      (r == null ? void 0 : r.role) && /* @__PURE__ */ e.jsx(J, { style: { marginTop: 8, background: "rgba(255,255,255,0.2)", color: "#fff", border: "none" }, children: r.role })
+      /* @__PURE__ */ e.jsx(H, { style: { color: "rgba(255,255,255,0.85)", margin: 0 }, children: "z-mq 消息队列 管理台" }),
+      (r == null ? void 0 : r.role) && /* @__PURE__ */ e.jsx(D, { style: { marginTop: 8, background: "rgba(255,255,255,0.2)", color: "#fff", border: "none" }, children: r.role })
     ] }) }),
-    /* @__PURE__ */ e.jsx(q, { gutter: [16, 16], children: l.map((n) => /* @__PURE__ */ e.jsx(f, { xs: 24, sm: 12, md: 12, lg: 8, children: /* @__PURE__ */ e.jsx(c, { hoverable: !0, onClick: () => s(n.key), style: { borderTop: "3px solid #7c3aed" }, children: /* @__PURE__ */ e.jsxs(p, { align: "start", size: 12, children: [
+    /* @__PURE__ */ e.jsx(w, { gutter: [16, 16], children: l.map((n) => /* @__PURE__ */ e.jsx(f, { xs: 24, sm: 12, md: 12, lg: 8, children: /* @__PURE__ */ e.jsx(c, { hoverable: !0, onClick: () => s(n.key), style: { borderTop: "3px solid #7c3aed" }, children: /* @__PURE__ */ e.jsxs(p, { align: "start", size: 12, children: [
       /* @__PURE__ */ e.jsx("div", { style: {
         width: 44,
         height: 44,
@@ -127,12 +127,20 @@ function G() {
     ] }) }) }, n.key)) })
   ] });
 }
-const m = { username: "admin", password: "123456", user: { name: "admin", role: "管理员" } };
+const m = {
+  username: "",
+  password: "",
+  user: { name: "", role: "管理员" }
+};
 function ne() {
-  const [s, r] = a(!1), o = async (l) => {
+  const [s, r] = a(!1), i = async (l) => {
     r(!0);
     try {
-      l.username === m.username && l.password === m.password ? (localStorage.setItem("token", "mock-" + m.username), localStorage.setItem("userInfo", JSON.stringify(m.user)), I.success("登录成功（mock 模式，待 CTC/SSO 接入）"), window.location.href = "/z-mq/home") : I.error("用户名或密码错误（默认 admin/123456）");
+      if (!m.username || !m.password) {
+        b.error("未配置 mock 账号（VITE_MOCK_USER / VITE_MOCK_PASSWORD）");
+        return;
+      }
+      l.username === m.username && l.password === m.password ? (localStorage.setItem("token", "mock-" + m.username), localStorage.setItem("userInfo", JSON.stringify(m.user)), b.success("登录成功（mock 模式，待 CTC/SSO 接入）"), window.location.href = "/z-mq/home") : b.error("用户名或密码错误");
     } finally {
       r(!1);
     }
@@ -160,9 +168,9 @@ function ne() {
       }, children: "z" }),
       /* @__PURE__ */ e.jsx("div", { style: { fontSize: 18, fontWeight: 600, color: "#0f172a" }, children: "z-mq 管理台" })
     ] }),
-    /* @__PURE__ */ e.jsxs(x, { onFinish: o, size: "large", children: [
-      /* @__PURE__ */ e.jsx(x.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(z, { prefix: /* @__PURE__ */ e.jsx(B, {}), placeholder: "用户名" }) }),
-      /* @__PURE__ */ e.jsx(x.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(z.Password, { prefix: /* @__PURE__ */ e.jsx(E, {}), placeholder: "密码" }) }),
+    /* @__PURE__ */ e.jsxs(x, { onFinish: i, size: "large", children: [
+      /* @__PURE__ */ e.jsx(x.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(z, { prefix: /* @__PURE__ */ e.jsx(E, {}), placeholder: "用户名" }) }),
+      /* @__PURE__ */ e.jsx(x.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(z.Password, { prefix: /* @__PURE__ */ e.jsx(R, {}), placeholder: "密码" }) }),
       /* @__PURE__ */ e.jsx(x.Item, { style: { marginBottom: 8 }, children: /* @__PURE__ */ e.jsx(
         k,
         {
@@ -174,33 +182,28 @@ function ne() {
           children: "登 录"
         }
       ) }),
-      /* @__PURE__ */ e.jsxs("div", { style: { textAlign: "center", color: "#94a3b8", fontSize: 12 }, children: [
-        "Mock 模式：用户名 ",
-        /* @__PURE__ */ e.jsx("b", { children: m.username }),
-        " / 密码 ",
-        /* @__PURE__ */ e.jsx("b", { children: m.password })
-      ] })
+      /* @__PURE__ */ e.jsx("div", { style: { textAlign: "center", color: "#94a3b8", fontSize: 12 }, children: "Mock 模式：账号由宿主注入（VITE_MOCK_USER / VITE_MOCK_PASSWORD）" })
     ] })
   ] }) });
 }
-const Q = [
-  { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ e.jsx(L, {}) },
-  { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ e.jsx(P, {}) },
-  { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ e.jsx(R, {}) },
-  { key: "/z-mq/docs", label: "组件文档", icon: /* @__PURE__ */ e.jsx(N, {}) }
+const G = [
+  { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ e.jsx(B, {}) },
+  { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ e.jsx(_, {}) },
+  { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ e.jsx(M, {}) },
+  { key: "/z-mq/docs", label: "组件文档", icon: /* @__PURE__ */ e.jsx(P, {}) }
 ], re = [
-  { path: "/z-mq/home", Component: G },
-  { path: "/z-mq/instance", Component: H },
-  { path: "/z-mq/topics", Component: U },
-  { path: "/z-mq/docs", Component: O },
+  { path: "/z-mq/home", Component: $ },
+  { path: "/z-mq/instance", Component: U },
+  { path: "/z-mq/topics", Component: V },
+  { path: "/z-mq/docs", Component: q },
   { path: "/z-mq/:rest*", Component: A }
 ];
 export {
-  O as ComponentDocPage,
-  G as HomePage,
-  H as Instance,
+  q as ComponentDocPage,
+  $ as HomePage,
+  U as Instance,
   ne as LoginPage,
-  U as Topics,
-  Q as menuItems,
+  V as Topics,
+  G as menuItems,
   re as routes
 };
