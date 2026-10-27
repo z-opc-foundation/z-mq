@@ -4,8 +4,7 @@ import {ReloadOutlined} from '@ant-design/icons'
 import {mqApi, mqErrorText, mqUpstreamErrorText, routeNotExistRemark} from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {AttributionUnavailableBanner, ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState, ListTable, PageHeader} from '@yuku123/z-frontend-common/ui'
-
+import { EmptyState, ListTable } from '@yuku123/z-frontend-common/ui'
 /**
  * Topic 列表 — NameServer 码 8 与 Broker 码 8 **并排**，外加按需下的码 3 路由详情。
  *
@@ -108,7 +107,6 @@ export default function TopicListPage() {
 
     return (
         <div>
-            <PageHeader title="Topic 列表"/>
             <Card extra={<Space>
                 <Button icon={<ReloadOutlined/>} loading={loading} onClick={load}>刷新</Button>
             </Space>}>

@@ -5,8 +5,6 @@ import {mqApi, mqErrorText, mqUpstreamErrorText} from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
 import {EmptyState} from '@yuku123/z-frontend-common/ui'
-import {PageHeader} from '@yuku123/z-frontend-common/ui'
-
 /**
  * 集群与 Broker — 码 4 `GET_BROKER_CLUSTER_INFO`。
  *
@@ -107,7 +105,6 @@ export default function ClusterPage() {
 
     return (
         <div>
-            <PageHeader title="集群与 Broker"/>
             <Card extra={<Space>
                 <Input.Search allowClear placeholder="按 Broker 名 / Cluster / Master 地址过滤" style={{width: 240}}
                               onChange={(e) => setKeyword(e.target.value)}/>

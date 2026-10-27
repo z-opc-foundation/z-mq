@@ -1,4 +1,4 @@
-import request from '@yuku123/z-frontend-common'
+import {request} from '@yuku123/z-frontend-common'
 
 /**
  * z-mq（自研 RocketMQ 风格消息中间件）管理面数据源。

@@ -6,8 +6,7 @@ import {
 } from '../services/api'
 import {useInstance} from '../services/useInstance'
 import {AttributionUnavailableBanner, ForeignListenerBanner, UnattributedDataBanner, ZombieChildBanner} from './AttributionBanner'
-import {EmptyState, ListTable, PageHeader} from '@yuku123/z-frontend-common/ui'
-
+import { EmptyState, ListTable } from '@yuku123/z-frontend-common/ui'
 /**
  * Broker 元数据 — 码 320/321/322/323/324 五档一次拉齐。
  *
@@ -114,8 +113,6 @@ export default function BrokerMetadataPage() {
 
     return (
         <div>
-            <PageHeader title="Broker 元数据"
-                        subtitle="BrokerOutAPI 码 320/321/322/323/324 · 地址由 NameServer 码 4 发现且只允许环回"/>
             <Card extra={<Space>
                 <span style={{color: '#64748b', fontSize: 12}}>Broker</span>
                 <Select size="small" style={{width: 240}} value={brokerName} onChange={setBrokerName}

@@ -1,4 +1,4 @@
-import { j as e, m as z, C as w, M as q } from "./ComponentDoc-OA-RoXBq.js";
+import { j as e, m as z, C as w, M as q } from "./ComponentDoc-D-MHGc6k.js";
 import { ReloadOutlined as T, UserOutlined as A, LockOutlined as E, HomeOutlined as R, DashboardOutlined as B, AppstoreOutlined as _, ReadOutlined as M } from "@ant-design/icons";
 import { useState as c, useEffect as b } from "react";
 import { Typography as p, Space as f, Button as S, Alert as C, Spin as P, Row as O, Col as x, Card as d, Statistic as y, Descriptions as v, Tag as K, Form as g, Input as I, message as j } from "antd";
@@ -122,7 +122,7 @@ function H() {
       }, children: n.icon }),
       /* @__PURE__ */ e.jsxs("div", { style: { minWidth: 0 }, children: [
         /* @__PURE__ */ e.jsx("div", { style: { fontSize: 15, fontWeight: 600, color: "#0f172a" }, children: n.label }),
-        /* @__PURE__ */ e.jsx("div", { style: { fontSize: 12, color: "#94a3b8", marginTop: 2 }, children: n.key })
+        n.desc && /* @__PURE__ */ e.jsx("div", { style: { fontSize: 12, color: "#94a3b8", marginTop: 2 }, children: n.desc })
       ] })
     ] }) }) }, n.key)) })
   ] });

@@ -9,8 +9,6 @@ import {
     UnattributedDataBanner,
     ZombieChildBanner,
 } from './AttributionBanner'
-import {PageHeader} from '@yuku123/z-frontend-common/ui'
-
 /** 上游真实响应：随便挑一条只读码打一发，用来证明"代理层不只是在报自省，它真能发出去" */
 function fmtTs(ms) {
     if (!ms) return '-'
@@ -96,7 +94,6 @@ export default function InstanceStatus() {
 
     return (
         <div>
-            <PageHeader title="实例与端口"/>
             <Card extra={<Space>
                 <Button icon={<ReloadOutlined/>} loading={probing} onClick={() => runProbe('cluster')}>实发一发 码4 GET_BROKER_CLUSTER_INFO</Button>
                 <Button icon={<ReloadOutlined/>} onClick={poll}>刷新自省</Button>
