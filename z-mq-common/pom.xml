@@ -14,7 +14,7 @@
     <artifactId>z-mq-common</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ Common</name>
+    <name>z-mq :: common</name>
     <description>Common utilities and data structures for Z-MQ</description>
 
     <url>https://github.com/yuku123/z-mq</url>

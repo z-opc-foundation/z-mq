@@ -14,7 +14,7 @@
     <artifactId>z-mq-broker</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ Broker</name>
+    <name>z-mq :: broker</name>
     <description>Broker for Z-MQ - Message storage and delivery</description>
 
     <url>https://github.com/yuku123/z-mq</url>

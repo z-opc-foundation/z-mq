@@ -14,7 +14,7 @@
     <artifactId>z-mq-client</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ Client</name>
+    <name>z-mq :: client</name>
     <description>Client SDK for Z-MQ - Producer and Consumer implementation</description>
 
     <url>https://github.com/yuku123/z-mq</url>

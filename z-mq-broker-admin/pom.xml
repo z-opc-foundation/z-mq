@@ -13,7 +13,7 @@
 
     <artifactId>z-mq-broker-admin</artifactId>
     <packaging>jar</packaging>
-    <name>Z-MQ Broker Admin</name>
+    <name>z-mq :: broker-admin</name>
     <description>Z-MQ 控制台后端 — 把 z-mq-tools 的 ClusterAdmin RPC 能力包成 HTTP REST，默认端口 9090。
         静态资源目录承载 z-mq-admin 前端的构建产物，与其它 *-admin 模块同构（前端打进同一个 jar）。</description>
 

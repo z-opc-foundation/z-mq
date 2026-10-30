@@ -14,7 +14,7 @@
     <artifactId>z-mq-store</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ Store</name>
+    <name>z-mq :: store</name>
     <description>Message storage module for Z-MQ</description>
 
     <url>https://github.com/yuku123/z-mq</url>

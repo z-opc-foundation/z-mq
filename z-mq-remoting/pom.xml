@@ -14,7 +14,7 @@
     <artifactId>z-mq-remoting</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ Remoting</name>
+    <name>z-mq :: remoting</name>
     <description>Network communication module based on Netty for Z-MQ</description>
 
     <url>https://github.com/yuku123/z-mq</url>

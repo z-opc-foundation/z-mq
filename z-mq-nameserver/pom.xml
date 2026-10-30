@@ -14,7 +14,7 @@
     <artifactId>z-mq-nameserver</artifactId>
     <packaging>jar</packaging>
 
-    <name>Z-MQ NameServer</name>
+    <name>z-mq :: nameserver</name>
     <description>NameServer for Z-MQ - Service discovery and routing management</description>
 
     <url>https://github.com/yuku123/z-mq</url>

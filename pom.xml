@@ -25,7 +25,7 @@
     <version>${revision}</version>
     <packaging>pom</packaging>
 
-    <name>z-mq</name>
+    <name>z-mq :: root</name>
     <description>Zero-copy broker + Nameserver + Spring Boot Starter 的轻量级分布式消息队列基础设施</description>
     <url>https://github.com/yuku123/z-mq</url>
     <licenses>
