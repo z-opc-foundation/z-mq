@@ -42,8 +42,10 @@ public class ClusterTestHelper {
         this.testId = UUID.randomUUID().toString().substring(0, 8);
         this.storeRoot = System.getProperty("user.home") + File.separator
                 + "zmq-test-" + testId;
-        this.namesrvPort = 19000 + (testId.hashCode() & 0x7FFF) % 500;
-        this.brokerPort = this.namesrvPort + 1000;
+        // 2026-10-30：原实现 19000 + hash%500 会在同一 JVM 多实例并发时撞桶
+        //（StabilityTest.testProducerResourceLeak 实测 BindException）。改为起簇前探测空闲端口。
+        this.namesrvPort = freePort();
+        this.brokerPort = freePort();
     }
 
     /**
@@ -248,5 +250,17 @@ public class ClusterTestHelper {
             }
         }
         dir.delete();
+    }
+
+    /**
+     * 探测一个当前空闲的 TCP 端口。
+     *
+     * <p>⚠ 认领表已提为 **JVM 全局共享**（见 {@link PortAllocator}）：
+     * 原来本类与 {@code RestartDurabilityTest} 各有一份独立认领表，
+     * 互相看不见对方认领的端口 ⇒ 全量跑时两个测试类可探到同一端口并撞车
+     * （{@code BindException: Address already in use}）。
+     */
+    private static int freePort() {
+        return PortAllocator.freePort();
     }
 }

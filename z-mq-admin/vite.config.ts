@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import {safeEmptyOutDir} from '../build-tools/safe-vite-plugin.mjs'
 
 // Z-MQ Console — Vite 配置
 // 默认端口 8081, 代理 /api 到 z-mq-broker-admin (默认 9090)
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [safeEmptyOutDir(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')

@@ -106,6 +106,13 @@ public class NettyServerBindHostTest {
             System.out.println("[SKIP] 本机没有非回环 IPv4 地址 ⇒ 无法在本地复现 'LAN 连不上'，跳过");
             return;
         }
+        // 平台探针：macOS 内核对「连本机任意自有地址」走本地短路 —— 即使服务端只绑 127.0.0.1，
+        // 连本机 LAN IP 也会成功（裸 ServerSocket 实测复现）。这类平台上"LAN 连不上"无法在本地
+        // 复现，跳过而不是假红；Linux（生产部署机）内核强制隔离，本用例照常全量断言。
+        if (!platformEnforcesLoopbackIsolation(lanIp)) {
+            System.out.println("[SKIP] 平台（macOS）对连本机自有地址走本地短路，'LAN 连不上'无法在本地复现，跳过");
+            return;
+        }
         Socket s = new Socket();
         try {
             s.connect(new InetSocketAddress(lanIp, addr.getPort()), 2000);
@@ -136,6 +143,29 @@ public class NettyServerBindHostTest {
     }
 
     /** 取本机第一个非回环 IPv4；没有则返回 null。 */
+    /**
+     * 平台是否强制「只绑回环 ⇒ 连自有 LAN 地址被拒」。
+     * 用一个与本服务端无关的裸 ServerSocket（只绑 127.0.0.1）做对照实验：
+     * 对照组都连得上 ⇒ 平台根本不隔离（macOS），本断言在该平台不可判 ⇒ 调用方跳过。
+     */
+    private static boolean platformEnforcesLoopbackIsolation(String lanIp) throws Exception {
+        java.net.ServerSocket probe = new java.net.ServerSocket();
+        try {
+            probe.bind(new InetSocketAddress("127.0.0.1", 0));
+            Socket s = new Socket();
+            try {
+                s.connect(new InetSocketAddress(lanIp, probe.getLocalPort()), 2000);
+                return false; // 对照组都连得上 ⇒ 平台不隔离
+            } catch (java.io.IOException e) {
+                return true;  // 对照组被拒 ⇒ 平台强制隔离，断言可判
+            } finally {
+                s.close();
+            }
+        } finally {
+            probe.close();
+        }
+    }
+
     private static String firstNonLoopbackIPv4() {
         try {
             Enumeration<NetworkInterface> nics = NetworkInterface.getNetworkInterfaces();

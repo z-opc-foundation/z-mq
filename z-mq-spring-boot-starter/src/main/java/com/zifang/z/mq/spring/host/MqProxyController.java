@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
@@ -415,7 +415,7 @@ public class MqProxyController {
      */
     @RequestMapping(path = PREFIX + "/**",
             method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
-    public void fallback(javax.servlet.http.HttpServletRequest req, HttpServletResponse resp) throws Exception {
+    public void fallback(jakarta.servlet.http.HttpServletRequest req, HttpServletResponse resp) throws Exception {
         String sub = req.getRequestURI();
         Map<String, Object> body = err("no such endpoint on the z-mq read surface", sub);
         body.put("method", req.getMethod());

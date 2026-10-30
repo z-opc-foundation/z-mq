@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -441,14 +440,17 @@ public class RestartDurabilityTest {
         return tempDir.resolve(sub).toString();
     }
 
-    /** 现问一个当前空闲的端口，不占固定端口。 */
+    /**
+     * 现问一个当前空闲的端口，不占固定端口。
+     *
+     * <p>⚠ 认领表已提为 **JVM 全局共享**（见 {@link com.zifang.z.mq.integration.support.PortAllocator}）：
+     * 原来本类与 {@code ClusterTestHelper} 各有一份独立认领表，互相看不见对方认领的端口
+     * ⇒ 全量跑时两个测试类探到同一端口，后 bind 的直接
+     * {@code java.net.BindException: Address already in use}。
+     * 症状指纹：**单独跑本类必绿，全量跑偶发红**。
+     */
     private static int freePort() throws Exception {
-        ServerSocket probe = new ServerSocket(0);
-        try {
-            return probe.getLocalPort();
-        } finally {
-            probe.close();
-        }
+        return com.zifang.z.mq.integration.support.PortAllocator.freePort();
     }
 
     private static void deleteRecursively(File file) {

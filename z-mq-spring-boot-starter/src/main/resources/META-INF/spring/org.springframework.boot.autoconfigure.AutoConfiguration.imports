@@ -1,0 +1,2 @@
+com.zifang.z.mq.spring.autoconfigure.ZmqAutoConfiguration
+com.zifang.z.mq.spring.host.MqHostAutoConfiguration

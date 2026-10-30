@@ -6,7 +6,7 @@ import com.zifang.z.mq.common.protocol.SendResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 

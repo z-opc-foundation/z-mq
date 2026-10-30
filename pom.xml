@@ -14,7 +14,7 @@
     <parent>
         <groupId>io.github.yuku123</groupId>
         <artifactId>z-boot-parent</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0</version>
         <relativePath/>
     </parent>
 
@@ -78,7 +78,7 @@
              那是迁移顺带改构建参数，不属于"依赖零漂移"这一档 ⇒ 留着。
              maven.compiler.source/target 与两个 encoding 则相反：父链面值与本仓逐字节相同
              （8 / 8 / UTF-8 / UTF-8，现读 z-boot-parent/pom.xml:56-59）⇒ 属性删掉，由 parent 下发。 -->
-        <java.version>8</java.version>
+        <java.version>17</java.version>
 
         <!-- Dependency Versions -->
         <!-- 2026-09-28 迁移到 z-boot-parent：下面这六格与父链**同值**，已删，由 parent 供给；

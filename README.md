@@ -25,12 +25,12 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 |------|-----|
 | **仓库** | `z-mq`（remote `git@github.com:z-opc-foundation/z-mq.git`，分支 `main`） |
 | **Maven 坐标** | `io.github.yuku123:z-mq:${revision}`，`packaging=pom` |
-| **当前版本** | `<revision>` = **`1.3.1`**（CI-friendly versions + 常开 flatten-maven-plugin 1.5.0） |
-| **父项目** | `io.github.yuku123:z-boot-parent:1.1.0`（`<relativePath/>` 留空，parent 在 repo1 不在磁盘；repo1 实测 200） |
-| **版本权威链** | `z-boot-parent` → 第三方地板 + 兄弟仓权威表（两段内容均已并进 parent 自身，`z-boot-dependencies` / `z-boot-fleet` 两个文件夹随 2026-10-08 火车制拓扑退役）；`z-boot-parent` 的 `<z-mq.version>` 现读 **`1.3.1`**（`z-boot/z-boot-parent/pom.xml` 一处）⇒ 本仓 revision 与 parent 槽位同格 |
+| **当前版本** | `<revision>` = **`1.3.2`**（CI-friendly versions + 常开 flatten-maven-plugin 1.5.0） |
+| **父项目** | `io.github.yuku123:z-boot-parent:1.2.0`（`<relativePath/>` 留空，parent 在 repo1 不在磁盘；repo1 实测 200） |
+| **版本权威链** | `z-boot-parent` → 第三方地板 + 兄弟仓权威表（两段内容均已并进 parent 自身，`z-boot-dependencies` / `z-boot-fleet` 两个文件夹随 2026-10-08 火车制拓扑退役）；`z-boot-parent` 的 `<z-mq.version>` 现读 **`1.3.2`**（`z-boot/z-boot-parent/pom.xml` 一处）⇒ 本仓 revision 与 parent 槽位同格 |
 | **Maven Central** | **已发布**：`z-mq` / `z-mq-common` / `z-mq-remoting` / `z-mq-store` / `z-mq-nameserver` / `z-mq-broker` / `z-mq-client` / `z-mq-spring-boot-starter` / `z-mq-tools` 九个坐标的 `1.3.1` 逐个 ranged GET 实测 **200**（`1.3.0` 同样 200）；组路径 `io/github/yuku123`。2026-10-20 新增的 `z-mq-broker-admin` 不在本实测列表内 —— 它是否已上架只认 repo1 回读（本地 `~/.m2` 里它只有本地安装记录、没有 `central=` 条目） |
 | **默认端口** | NameServer **9876**、Broker **10911**（写死在两个 `Startup` 的 `args.length == 0` 分支）；`NettyServerConfig.listenPort` 字段默认 **8888**，但两个 `Startup` 都会覆盖它 ⇒ 8888 不是任何进程的实测端口；控制台 Vite dev **8081** |
-| **运行口径** | Java 8（根 `<java.version>8</java.version>`）· Spring Boot **仅** starter 模块用 2.7.18 · 日志 Log4j2 · 序列化 Jackson JSON |
+| **运行口径** | Java 17（根 `<java.version>8</java.version>`）· Spring Boot **仅** starter 模块用 2.7.18 · 日志 Log4j2 · 序列化 Jackson JSON |
 | **模块数** | Maven reactor **9 个**；另有 `z-mq-admin`（npm/Vue 工程，**不在 reactor、不在任何 pom 的 `<modules>` 里**） |
 | **最近更新** | 2026-09-30 |
 
@@ -81,7 +81,7 @@ Store（CommitLog 顺序写 + 内存队列索引）、Remoting（Netty 长连接
 
 ```
 z-mq/
-├── pom.xml                     # 聚合 POM：parent=z-boot-parent:1.1.0，<revision>=1.3.1，9 个 module
+├── pom.xml                     # 聚合 POM：parent=z-boot-parent:1.2.0，<revision>=1.3.1，9 个 module
 ├── README.md                   # 本文件
 ├── LICENSE                     # MIT
 ├── _doc/006_release/sonatype-limit-request-email.txt   # 一封纯文本邮件草稿：向 Sonatype 申请提高发布配额（不是配置，也不是代码）
@@ -165,8 +165,8 @@ Service + admin Deployment 五份清单，`env/.env.example` **只放占位符**
 mvn clean install -DskipTests
 ```
 
-第三方与兄弟仓版本全部由 `z-boot-parent:1.1.0` 下发（第三方地板与兄弟仓权威表均已并入 parent 自身），
-构建前确认能解析到 `io.github.yuku123:z-boot-parent:1.1.0`（repo1 实测 200，`<relativePath/>` 留空 ⇒ 不在磁盘上找）。
+第三方与兄弟仓版本全部由 `z-boot-parent:1.2.0` 下发（第三方地板与兄弟仓权威表均已并入 parent 自身），
+构建前确认能解析到 `io.github.yuku123:z-boot-parent:1.2.0`（repo1 实测 200，`<relativePath/>` 留空 ⇒ 不在磁盘上找）。
 
 ⚠️ 九个 POM 都**没有** shade/assembly/`spring-boot-maven-plugin`，产物是普通瘦 jar，
 **没有可执行 jar**；下面的 `java -cp` 需要自己把依赖拼出来（例如 `mvn dependency:build-classpath`）。
@@ -403,7 +403,7 @@ mvn verify               # surefire + failsafe + jacoco report
 - **已知的真实红**：位点提交被静默吞（`feature010`）、偶发"通道已建好但一次请求 10s 无响应"（`feature011`，
   怀疑 JVM 停顿）—— 都还没排产修，跑全量遇到时**别归因到自己这次的改动**。
 - **跑不过 ≠ 代码坏**：本仓测试从不依赖 MySQL/Redis/Docker，唯一外部条件是 `~/.m2` 能解析
-  `z-boot-parent:1.1.0` 及其父链。
+  `z-boot-parent:1.2.0` 及其父链。
 
 ---
 
