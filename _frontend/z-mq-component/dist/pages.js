@@ -1,7 +1,7 @@
-import { j as e, m as z, C as w, M as q } from "./ComponentDoc-D-MHGc6k.js";
-import { ReloadOutlined as T, UserOutlined as A, LockOutlined as E, HomeOutlined as R, DashboardOutlined as B, AppstoreOutlined as _, ReadOutlined as M } from "@ant-design/icons";
+import { j as e, m as I, C as w, M as q } from "./ComponentDoc-D-MHGc6k.js";
+import { ReloadOutlined as T, UserOutlined as A, LockOutlined as E, HomeOutlined as R, DashboardOutlined as B, AppstoreOutlined as M, ReadOutlined as _ } from "@ant-design/icons";
 import { useState as c, useEffect as b } from "react";
-import { Typography as p, Space as f, Button as S, Alert as C, Spin as P, Row as O, Col as x, Card as d, Statistic as y, Descriptions as v, Tag as K, Form as g, Input as I, message as j } from "antd";
+import { Typography as p, Space as f, Button as S, Alert as C, Spin as P, Row as O, Col as x, Card as d, Statistic as y, Descriptions as z, Tag as K, Form as g, Input as v, message as j } from "antd";
 import { ListTable as D } from "@yuku123/z-frontend-common/ui";
 import { useNavigate as L } from "react-router-dom";
 const { Title: W } = p;
@@ -9,7 +9,7 @@ function N() {
   const [s, t] = c(null), [i, l] = c(!1), [n, a] = c(null), m = async () => {
     l(!0);
     try {
-      t(await z.instance()), a(null);
+      t(await I.instance()), a(null);
     } catch (o) {
       a((o == null ? void 0 : o.message) || String(o)), t(null);
     } finally {
@@ -41,7 +41,7 @@ function N() {
           }
         ) }) })
       ] }),
-      /* @__PURE__ */ e.jsx(d, { title: "实例详情", children: /* @__PURE__ */ e.jsx(v, { column: 2, bordered: !0, size: "small", children: Object.entries(s).filter(([o]) => !["bindError"].includes(o)).map(([o, r]) => /* @__PURE__ */ e.jsx(v.Item, { label: o, children: typeof r == "object" ? JSON.stringify(r) : String(r) }, o)) }) })
+      /* @__PURE__ */ e.jsx(d, { title: "实例详情", children: /* @__PURE__ */ e.jsx(z, { column: 2, bordered: !0, size: "small", children: Object.entries(s).filter(([o]) => !["bindError"].includes(o)).map(([o, r]) => /* @__PURE__ */ e.jsx(z.Item, { label: o, children: typeof r == "object" ? JSON.stringify(r) : String(r) }, o)) }) })
     ] })
   ] });
 }
@@ -50,7 +50,7 @@ function J() {
   const [s, t] = c([]), [i, l] = c(!1), [n, a] = c(null), m = async () => {
     l(!0);
     try {
-      const r = await z.topics(), h = Array.isArray(r) ? r : (r == null ? void 0 : r.topics) || [];
+      const r = await I.topics(), h = Array.isArray(r) ? r : (r == null ? void 0 : r.topics) || [];
       t(h.map((u, k) => typeof u == "string" ? { key: k, name: u } : { key: k, ...u })), a(null);
     } catch (r) {
       a((r == null ? void 0 : r.message) || String(r));
@@ -168,8 +168,8 @@ function te({ mockAuth: s } = {}) {
       /* @__PURE__ */ e.jsx("div", { style: { fontSize: 18, fontWeight: 600, color: "#0f172a" }, children: "z-mq 管理台" })
     ] }),
     /* @__PURE__ */ e.jsxs(g, { onFinish: n, size: "large", children: [
-      /* @__PURE__ */ e.jsx(g.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(I, { prefix: /* @__PURE__ */ e.jsx(A, {}), placeholder: "用户名" }) }),
-      /* @__PURE__ */ e.jsx(g.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(I.Password, { prefix: /* @__PURE__ */ e.jsx(E, {}), placeholder: "密码" }) }),
+      /* @__PURE__ */ e.jsx(g.Item, { name: "username", rules: [{ required: !0, message: "请输入用户名" }], children: /* @__PURE__ */ e.jsx(v, { prefix: /* @__PURE__ */ e.jsx(A, {}), placeholder: "用户名" }) }),
+      /* @__PURE__ */ e.jsx(g.Item, { name: "password", rules: [{ required: !0, message: "请输入密码" }], children: /* @__PURE__ */ e.jsx(v.Password, { prefix: /* @__PURE__ */ e.jsx(E, {}), placeholder: "密码" }) }),
       /* @__PURE__ */ e.jsx(g.Item, { style: { marginBottom: 8 }, children: /* @__PURE__ */ e.jsx(
         S,
         {
@@ -185,12 +185,12 @@ function te({ mockAuth: s } = {}) {
     ] })
   ] }) });
 }
-const $ = [
+const ne = { title: "z-mq 消息队列", short: "z-mq" }, $ = [
   { key: "/z-mq/home", label: "首页", icon: /* @__PURE__ */ e.jsx(R, {}) },
   { key: "/z-mq/instance", label: "实例与端口", icon: /* @__PURE__ */ e.jsx(B, {}) },
-  { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ e.jsx(_, {}) },
-  { key: "/z-mq/docs", label: "组件文档", icon: /* @__PURE__ */ e.jsx(M, {}) }
-], ne = [
+  { key: "/z-mq/topics", label: "Topic 清单", icon: /* @__PURE__ */ e.jsx(M, {}) },
+  { key: "/z-mq/docs", label: "组件文档", icon: /* @__PURE__ */ e.jsx(_, {}) }
+], re = [
   { path: "/z-mq/home", Component: H },
   { path: "/z-mq/instance", Component: N },
   { path: "/z-mq/topics", Component: J },
@@ -203,6 +203,7 @@ export {
   N as Instance,
   te as LoginPage,
   J as Topics,
+  ne as appMeta,
   $ as menuItems,
-  ne as routes
+  re as routes
 };
