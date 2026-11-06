@@ -6,9 +6,8 @@
 #   docker build -f deploy/Dockerfile.admin -t z-mq-broker-admin:local .
 # 前端 dist 在**仓外**构建好再 COPY 进来（见 deploy/bin/build-admin-dist.sh），
 # 不在镜像里跑 npm —— 构建机装 Node 会把镜像重拖一大截，且 npm registry 在部分网络里不可达。
-ARG BUILDER_BASE=maven:3.9.9-eclipse-temurin-8
-ARG RUNTIME_BASE=eclipse-temurin:8-jre
-
+ARG BUILDER_BASE=maven:3.9.9-eclipse-temurin-17
+ARG RUNTIME_BASE=eclipse-temurin:17-jre
 FROM ${BUILDER_BASE} AS builder
 
 WORKDIR /build
