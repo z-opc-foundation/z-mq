@@ -16,6 +16,9 @@ spec:
       labels:
         app: z-mq-nameserver
     spec:
+      # ⚠ 与 hostPath 成对钉节点（2026-11-11 持久化规范）：数据在节点本地盘 ⇒ 漂移即丢。
+      nodeSelector:
+        kubernetes.io/hostname: zifang002
       containers:
         - name: nameserver
           image: z-mq-nameserver:local
@@ -46,11 +49,9 @@ spec:
               port: 9876
             initialDelaySeconds: 30
             periodSeconds: 20
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+      volumes:
+        # kvConfig 真源 = zifang002:/home/zifang/data/z-mq/nameserver（2026-11-11 自 volumeClaimTemplates 迁入）
+        - name: data
+          hostPath:
+            path: /home/zifang/data/z-mq/nameserver
+            type: Directory

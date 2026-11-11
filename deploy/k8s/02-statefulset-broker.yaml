@@ -16,6 +16,9 @@ spec:
       labels:
         app: z-mq-broker
     spec:
+      # ⚠ 与 hostPath 成对钉节点（2026-11-11 持久化规范）：数据在节点本地盘 ⇒ 漂移即丢。
+      nodeSelector:
+        kubernetes.io/hostname: zifang002
       containers:
         - name: broker
           image: z-mq-broker:local
@@ -53,11 +56,9 @@ spec:
               port: 10911
             initialDelaySeconds: 60
             periodSeconds: 20
-  volumeClaimTemplates:
-    - metadata:
-        name: store
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
+      volumes:
+        # 消息存储真源 = zifang002:/home/zifang/data/z-mq/broker（2026-11-11 自 volumeClaimTemplates 迁入）
+        - name: store
+          hostPath:
+            path: /home/zifang/data/z-mq/broker
+            type: Directory
