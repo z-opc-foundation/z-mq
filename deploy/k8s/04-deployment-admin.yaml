@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: z-mq-broker-admin
-          image: z-mq-broker-admin:local
+          image: z-mq-broker-admin:20261111-bc33fda4
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
