@@ -33,7 +33,7 @@ const BROKER_COLUMNS = [
             : <span style={{color: '#94a3b8'}}>—</span>
     },
     {
-        title: '端口是否等于本 JVM 配置的 broker 端口', key: 'portMatch', width: 240,
+        title: '端口核对', key: 'portMatch', width: 240,
         render: (_, row) => {
             if (!row.port) return <Tag>无地址</Tag>
             if (row.portMatched === null) return <Tag color="warning">配置端口未知</Tag>
@@ -114,9 +114,7 @@ export default function ClusterPage() {
                 <ZombieChildBanner data={instance}/>
                 {error && (
                     <Alert type="error" showIcon
-                           message={`读 NameServer 失败：${mqErrorText(error)}`}
-                           description={`这一档是 nameserver 的只读码，不需要 broker 注册就能应答；它不通说明 :${instance?.namesrvPort ?? '?'} 上根本没有能答话的进程（或者答话的那个跟本 JVM 不是一家的，见顶部红条）。` +
-                               "端口取自 /api/mq/__instance，写死端口会在换端口后把人指到别的进程上。"}/>
+                           message={`读 NameServer 失败：${mqErrorText(error)}`}/>
                 )}
                 {upstreamErr && <Alert type="warning" showIcon style={{marginBottom: 12}} message={upstreamErr}/>}
                 {res && !error && (
@@ -129,15 +127,15 @@ export default function ClusterPage() {
                             <Col span={6}><Statistic title="往返耗时" value={res.elapsedMs ?? '-'} suffix="ms"/></Col>
                         </Row>
                         {rows.length === 0 ? (
-                            <EmptyState title="brokerAddrTable 是空的"
-                                        description="没有任何 broker 向这台 NameServer 发过 REGISTER_BROKER（码 1）。两种成因要分开：① broker 子进程没起 / 没 bind 上（看顶部红条与「实例与端口」页的 bind 原文）；② broker 起了但配的 zmq.namesrv-addr 指向的是另一台 NameServer。本页不给「注册 broker」按钮 —— 那是写面，另立卡。"/>
+                            <EmptyState title="还没有 broker 注册"
+                                        description="没有任何 broker 向这台 NameServer 发过注册心跳，或 broker 子进程未启动。"/>
                         ) : (
                             <Table size="small" rowKey="key" loading={loading}
                                    dataSource={filteredRows} columns={BROKER_COLUMNS} pagination={false /* §2 规则 2 豁免：brokerAddrTable 是 broker 向本 NameServer 的注册记录，一个集群内 broker 数量有界，不随业务增长 */}/>
                         )}
                     </>
                 )}
-                {!res && !error && <EmptyState title="还没读到数据" description="刷新以发送一次只读请求码 4。"/>}
+                {!res && !error && <EmptyState title="还没读到数据" description="点击刷新发送一次只读查询。"/>}
             </Card>
 
             {clusterRows.length > 0 && (
@@ -149,18 +147,6 @@ export default function ClusterPage() {
                                   }))}/>
                 </Card>
             )}
-
-            <Card title="上游语义提示" style={{marginTop: 16}}>
-                <div style={{color: '#64748b', fontSize: 12, lineHeight: 1.9}}>
-                    <div>· 数据来自 NameServer 码 4 <code>GET_BROKER_CLUSTER_INFO</code>（brokerAddrTable / clusterAddrTable）。</div>
-                    <div>· <code>brokerAddrTable</code> 记的是「谁发过 REGISTER_BROKER 心跳」，不是「谁在跑」。进程活着但心跳线程没起 ⇒ 这里为空。</div>
-                    <div>· 上表最后一列是本页自带的第二重归属校验：注册的 broker 端口应当等于
-                        <code>zmq.broker-port</code>。不等就说明<b>这台 NameServer 记的是另一套集群</b>，
-                        后面 broker 页拿到的地址会被代理层的环回白名单挡掉（403），那是正确行为不是 bug。</div>
-                    <div>· 代理层只会拨环回地址（<code>127.0.0.1</code> / <code>localhost</code> / <code>::1</code>），
-                        非环回的注册地址一律拒绝，这既是安全边界也是防误连别机的护栏。</div>
-                </div>
-            </Card>
         </div>
     )
 }

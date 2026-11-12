@@ -119,8 +119,7 @@ export default function TopicListPage() {
                 )}
                 {brokerError && (
                     <Alert type="error" showIcon style={{marginBottom: 12}}
-                           message={`读 Broker 的 topicConfigTable 失败：${mqErrorText(brokerError)}`}
-                           description="Broker 侧的地址全靠 NameServer 的码 4 发现，且只允许环回。这一档失败通常说明集群里根本没有注册过 broker（见「集群与 Broker」页），或者代理层按环回白名单拒了外部地址 —— 后者是正确行为。"/>
+                           message={`读 Broker 的 topic 列表失败：${mqErrorText(brokerError)}`}/>
                 )}
                 {nsUpstreamErr && <Alert type="warning" showIcon style={{marginBottom: 12}} message={`NameServer：${nsUpstreamErr}`}/>}
                 {brUpstreamErr && <Alert type="warning" showIcon style={{marginBottom: 12}} message={`Broker：${brUpstreamErr}`}/>}
@@ -138,7 +137,7 @@ export default function TopicListPage() {
 
                 {nothingLoaded ? (
                     <EmptyState title="两侧都没取到 topic 列表"
-                                description="这不是「集群里没有 topic」的证据：上面任一档报错、或上游回了非 0 业务码（HTTP 仍是 200），都到这里显示为取不到。先读上面的红/黄条定性，再决定要不要怀疑数据。"/>
+                                description="先看上方告警定性，再判断是否真的没有 topic。"/>
                 ) : (
                     /* 列表页走基座 ListTable（lead 008 §2 规则 2/3/4）：分页 / 过滤 / EmptyState 三件套。
                        外层 Card 已经给了边框与内边距（里面还有横幅/告警/统计条），
@@ -159,15 +158,6 @@ export default function TopicListPage() {
                     />
                 )}
             </Card>
-
-            <Card title="这一页的两个语义坑" style={{marginTop: 16}}>
-                <div style={{color: '#64748b', fontSize: 12, lineHeight: 1.9}}>
-                    <div>· 码 8 只回<b>名字</b>，队列数 / perm / 集群归属要展开走码 3；展开是懒加载，所以打开本页不会打出 N 个请求。</div>
-                    <div>· 码 3 查不存在的 topic 时上游回的是 <code>responseCode=1 SYSTEM_ERROR</code> + remark
-                        「topic X not exist」—— <b>同一个码 1 既表示系统错误也表示 topic 不存在</b>，
-                        只有 remark 能分开，所以下面把 remark 原文贴出来而不是翻译成"出错了"。</div>
-                </div>
-            </Card>
         </div>
     )
 }
@@ -187,8 +177,7 @@ function RouteDetail({state}) {
     return (
         <div>
             {notExist && <Alert type="warning" showIcon style={{marginBottom: 8}}
-                                message={`NameServer 报这个 topic 没有路由（原文：${notExist}）`}
-                                description="上游用的是 SYSTEM_ERROR(1) + remark，不是「查到但是空」，所以这一格不能渲染成空表。"/>}
+                                message={`NameServer 报这个 topic 没有路由（原文：${notExist}）`}/>}
             {!notExist && upstreamErr && <Alert type="error" showIcon style={{marginBottom: 8}} message={upstreamErr}/>}
             {state.data && <UnattributedDataBanner res={state}/>}
             {state.data && (

@@ -95,12 +95,11 @@ export default function InstanceStatus() {
     return (
         <div>
             <Card extra={<Space>
-                <Button icon={<ReloadOutlined/>} loading={probing} onClick={() => runProbe('cluster')}>实发一发 码4 GET_BROKER_CLUSTER_INFO</Button>
+                <Button icon={<ReloadOutlined/>} loading={probing} onClick={() => runProbe('cluster')}>发送探针</Button>
                 <Button icon={<ReloadOutlined/>} onClick={poll}>刷新自省</Button>
             </Space>}>
                 {instanceError ? (
-                    <Alert type="error" showIcon message={`自省接口调用失败：${instanceErrorText}`}
-                           description="/api/mq/__instance 不碰 NameServer 也不碰 Broker，由 z-opc 自己的 controller 直接应答；它都不通说明是 z-opc 侧的路由/认证问题（302 到登录页 = 没带会话 Cookie；404 = MainWebConfig.spaPaths 或 /api/mq 映射没接上）。"/>
+                    <Alert type="error" showIcon message={`自省接口调用失败：${instanceErrorText}`}/>
                 ) : (
                     <>
                         <AttributionUnavailableBanner data={instance}/>
@@ -108,8 +107,7 @@ export default function InstanceStatus() {
                         <ZombieChildBanner data={instance}/>
                         {instance && !instance.embeddedConfigLoaded && (
                             <Alert type="warning" showIcon style={{marginBottom: 16}}
-                                   message="ZMqEmbeddedServerConfig 未装载"
-                                   description="zmq.enabled 不为 true 时这个 @Configuration 整个不生效 ⇒ 不会有任何子进程被 spawn，页面所有数据必然拿不到。"/>
+                                   message="内嵌配置未装载（zmq.enabled 不为 true）"/>
                         )}
                         <Descriptions bordered size="small" column={2}
                                       items={[
@@ -192,15 +190,11 @@ export default function InstanceStatus() {
                         {instance?.surfaceNote && (
                             <div style={{marginTop: 12, color: '#64748b', fontSize: 12}}>{instance.surfaceNote}</div>
                         )}
-                        <div style={{marginTop: 12, color: '#64748b', fontSize: 12}}>
-                            · 自省接口 <code>GET /api/mq/__instance</code>（由 MqProxyController 自己应答，不经过 z-mq）+ 只读请求码实发探针。
-                        </div>
                     </>
                 )}
             </Card>
 
-            <Card title="子进程 bind 失败原文（spawn 器落的日志）" style={{marginTop: 16}}
-                  extra={<Tag color="blue">ZMqEmbeddedServerConfig 把子进程 stdout/stderr 追加到这里</Tag>}>
+            <Card title="子进程日志" style={{marginTop: 16}}>
                 {instance ? (
                     <Descriptions bordered size="small" column={1}
                                   items={['namesrvSpawnLog', 'brokerSpawnLog'].map((k) => {
@@ -224,13 +218,13 @@ export default function InstanceStatus() {
                 ) : <Alert type="info" showIcon message="自省接口没通，读不到日志字段"/>}
             </Card>
 
-            <Card title="实发一发只读请求码（证明协议适配器本身成立，而不只是在报自省）" style={{marginTop: 16}}>
+            <Card title="只读探针" style={{marginTop: 16}}>
                 <Space direction="vertical" style={{width: '100%'}}>
                     <Space wrap>
-                        <Button size="small" loading={probing} onClick={() => runProbe('cluster')}>码 4 · 集群注册表</Button>
-                        <Button size="small" loading={probing} onClick={() => runProbe('topics')}>码 8 · NameServer topic 列表</Button>
-                        <Button size="small" loading={probing} onClick={() => runProbe('brokerTopics')}>Broker 码 8 · 本 broker topic</Button>
-                        <Button size="small" loading={probing} onClick={() => runProbe('brokerDataVersion')}>Broker 码 324 · DataVersion</Button>
+                        <Button size="small" loading={probing} onClick={() => runProbe('cluster')}>集群注册表（码 4）</Button>
+                        <Button size="small" loading={probing} onClick={() => runProbe('topics')}>NameServer topic 列表（码 8）</Button>
+                        <Button size="small" loading={probing} onClick={() => runProbe('brokerTopics')}>Broker topic 列表</Button>
+                        <Button size="small" loading={probing} onClick={() => runProbe('brokerDataVersion')}>Broker DataVersion</Button>
                     </Space>
                     {probeError && (
                         <Alert type="error" showIcon
@@ -266,28 +260,24 @@ export default function InstanceStatus() {
                         </>
                     )}
                     {!probe && !probeError && (
-                        <Alert type="info" showIcon
-                               message="还没发探针"
-                               description="自省接口证明的是「z-opc 这一层活着、且知道自己没起」；发一发只读码证明的是「协议适配这条形状走得通」。两个都要。"/>
+                        <Alert type="info" showIcon message="还没有发送过探针"/>
                     )}
                 </Space>
             </Card>
 
-            <Card title="本代理可达的只读请求码（穷举，无通用转发口）" style={{marginTop: 16}}
+            <Card title="只读请求码目录" style={{marginTop: 16}}
                   extra={<Space>
-                      <Input.Search allowClear placeholder="按逻辑端点 / 请求码 / 常量名过滤" style={{width: 240}}
+                      <Input.Search allowClear placeholder="按端点 / 请求码 / 常量名过滤" style={{width: 240}}
                                     onChange={(e) => setKeyword(e.target.value)}/>
                   </Space>}>
                 <Table size="small" rowKey="ep" dataSource={filteredCodeRows} columns={CODE_COLUMNS}
                        pagination={false /* §2 规则 2 豁免：只读请求码是协议里穷举出来的固定常量集合（卡片标题即「穷举」），行数不随业务增长 */}/>
                 {instance?.unavailableOnBroker120?.length > 0 && (
                     <Alert type="warning" showIcon style={{marginTop: 12}}
-                           message="以下能力在 z-mq 1.2.0 上根本没有请求码，页面不做也不假做"
+                           message="以下能力 z-mq 1.2.0 未提供请求码，页面不做"
                            description={
                                <div>
-                                   <div style={{fontWeight: 600, marginTop: 4}}>Broker 侧未注册：</div>
                                    <ul style={{margin: '4px 0 0 18px'}}>{instance.unavailableOnBroker120.map((s) => <li key={s}>{s}</li>)}</ul>
-                                   <div style={{fontWeight: 600, marginTop: 4}}>NameServer 侧未实现：</div>
                                    <ul style={{margin: '4px 0 0 18px'}}>{(instance.unavailableOnNamesrv120 || []).map((s) => <li key={s}>{s}</li>)}</ul>
                                </div>
                            }/>

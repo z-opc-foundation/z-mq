@@ -20,16 +20,7 @@ export function ForeignListenerBanner({data}) {
     ].filter(Boolean).join('；')
     return (
         <Alert type="error" showIcon style={{marginBottom: 16}}
-               message="有端口在应答，但应答者不是本次构建 spawn 的子进程 —— 下面所有表格都不算孵化结果"
-               description={
-                   `外来嫌疑：${who}。` +
-                   (data.bindError
-                       ? ` 本 JVM 的子进程 bind 失败原文：${data.bindError}`
-                       : ' 本 JVM 的子进程没有 bind 成功的记录。') +
-                   // 端口取实例自省回来的实际值：写死 9876/10911 会在换端口后把人指到别的进程上
-                   ` 处理方式只有两种：让出 ${namesrvPort}/${brokerPort}，或给 zmq.namesrv-port / zmq.broker-port 换端口。` +
-                   ' 代理层不会替你去占端口，也不会去 kill 别人的进程。'
-               }/>
+               message={`有端口在应答，但应答者不是本次构建 spawn 的子进程 —— 外来嫌疑：${who}`}/>
     )
 }
 
@@ -60,12 +51,7 @@ export function ZombieChildBanner({data}) {
     if (!zombies.length) return null
     return (
         <Alert type="error" showIcon style={{marginBottom: 16}}
-               message={`子进程 isAlive()=true 但端口不归它：${zombies.join('、')} —— 「进程在」不等于「服务在」`}
-               description={
-                   'z-mq 的 Main 会 Thread.currentThread().join()，所以 ZMqEmbeddedServerConfig 是 spawn 子进程而不是线程内嵌。' +
-                   'bind 失败时 main 线程已死、Netty 非守护线程吊着 JVM 不退，于是 isAlive() 一路报"好"。' +
-                   '这就是 __instance 把 *ChildAlive 和 *PortOwnedByMyChild 拆成两格的原因。'
-               }/>
+               message={`子进程存活但端口不归它：${zombies.join('、')} —— 进程在不等于服务在`}/>
     )
 }
 
@@ -74,8 +60,6 @@ export function AttributionUnavailableBanner({data}) {
     if (!data || data.attributionAvailable !== false) return null
     return (
         <Alert type="warning" showIcon style={{marginBottom: 16}}
-               message="归属无法自证（lsof 探针不可用或已关闭）"
-               description={data.attributionMethod + '。此时页面不猜：请人工执行 lsof -nP -iTCP:'
-                   + data.namesrvPort + ' -sTCP:LISTEN 与本页 jvm/子进程 pid 对照。'}/>
+               message="归属无法自证（lsof 探针不可用或已关闭），页面不做猜测"/>
     )
 }

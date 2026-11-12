@@ -125,8 +125,7 @@ export default function BrokerMetadataPage() {
                 <AttributionUnavailableBanner data={instance}/>
                 {clusterError && (
                     <Alert type="error" showIcon style={{marginBottom: 12}}
-                           message={`无法从 NameServer 发现 broker：${mqErrorText(clusterError)}`}
-                           description="下面五档的地址全靠码 4，发现不到就只能整页 503 —— 那是「集群里没有注册过的 broker」，不是这五档本身坏了。"/>
+                           message={`无法从 NameServer 发现 broker：${mqErrorText(clusterError)}`}/>
                 )}
                 <Row gutter={16}>
                     <Col span={8}><Statistic title="码 4 发现的 broker 数" value={brokers.length}/></Col>
@@ -159,8 +158,7 @@ function SectionCard({section, state, rows}) {
             {upstreamErr && <Alert type="warning" showIcon style={{marginBottom: 12}} message={upstreamErr}/>}
             {state && !loadError && <UnattributedDataBanner res={state}/>}
             {note && (
-                <Alert type="info" showIcon style={{marginBottom: 12}}
-                       message="上游语义（不是本页的推断）" description={note}/>
+                <Alert type="info" showIcon style={{marginBottom: 12}} message={note}/>
             )}
             {state && !loadError && data && section.key === 'topicConfig' && (
                 rows && rows.length
@@ -192,14 +190,10 @@ function SectionCard({section, state, rows}) {
                         cardProps={{variant: 'borderless', styles: {body: {padding: 0}}}}
                     />
                     : <EmptyState title="offsetTable 是空的"
-                                  description="注意上面那条「上游语义」：位点表为空可能是真没有消息，也可能只是这条链路上还没产生过写入。"/>
+                                  description="可能是真的没有消息，也可能是这条链路上还没有产生过写入。"/>
             )}
             {state && !loadError && data && section.key === 'subscription' && (
-                <div style={{color: '#64748b', fontSize: 12}}>
-                    body 原文（注意它连 <code>subscription</code> 字段都没有，是一个空的
-                    <code>ConsumerOffsetSerializeWrapper</code>）：
-                    <pre style={{whiteSpace: 'pre-wrap', marginTop: 8, fontSize: 12}}>{JSON.stringify(data, null, 2)}</pre>
-                </div>
+                <pre style={{whiteSpace: 'pre-wrap', marginTop: 8, fontSize: 12}}>{JSON.stringify(data, null, 2)}</pre>
             )}
             {state && !loadError && data && section.key === 'dataVersion' && (
                 <Descriptions bordered size="small" column={1}
