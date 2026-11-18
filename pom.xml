@@ -14,7 +14,7 @@
     <parent>
         <groupId>io.github.yuku123</groupId>
         <artifactId>z-boot-parent</artifactId>
-        <version>1.2.4</version>
+        <version>1.2.6</version>
         <relativePath/>
     </parent>
 
@@ -87,12 +87,20 @@
              log4j2.version=2.25.4 / spring-boot.version=2.7.18 / commons-lang3.version=3.18.0 /
              z-util.version=1.0.13（fleet 的 z-util.* 格同值，两个模块里的 <version> 一并删掉）。
              留着的四格都是**分歧或父链不供给**：
-               guava 本仓 33.6.0-jre vs 地板 32.0.0-jre（删了就降级，且必须走 DM 直接条目才顶得住
-               继承来的 32.0.0，见下面 <dependencyManagement> 那条）；
+               guava 2026-11-18 第二轮起与父链**同值**（33.7.2-jre，见下面那格）；
                slf4j 2.0.12 / logback 1.5.34 父链没有对应受管项（地板靠 spring-boot-dependencies 2.7.18
                给的是 1.7.36 / 1.2.12，本仓刻意抬到 slf4j 2.x 线）；
                fastjson2 2.0.47 父链不供给（当前无 <version> 引用它，留着是家族口径的登记位）。 -->
-        <guava.version>33.6.0-jre</guava.version>
+        <!-- 2026-11-18 第二轮：33.6.0-jre → 33.7.2-jre（与 z-boot-parent 1.2.4 对齐）
+             GHSA-xxph-c9ww-hj94（C:H，CompactHashMap/CompactHashSet/MapMakerInternalMap
+             反序列化触发不可控内存分配），introduced=0，fixed=33.7.2。
+             原来这格是"本仓 33.6.0-jre vs 地板 32.0.0-jre"的**分歧登记位**（靠本仓 DM 直接条目
+             顶住继承来的 32.0.0）—— 但它同时**覆盖了 parent 的 guava.version**，
+             于是 parent 抬到 33.7.2-jre 后本仓仍被拉回 33.6.0-jre（= 本轮 OSV 全量复核的真漏洞点）。
+             现在与 parent 同值 ⇒ 这格可以删，但**先留着**：
+             README 硬规则要求"本仓声明的版本格必须在本仓 pom 里可见"，
+             且下面的 DM 直接条目引用 ${guava.version}（删属性会让 DM 条目变成空版本）。 -->
+        <guava.version>33.7.2-jre</guava.version>
         <slf4j.version>2.0.12</slf4j.version>
         <logback.version>1.5.34</logback.version>
         <fastjson2.version>2.0.47</fastjson2.version>
