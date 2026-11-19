@@ -1,5 +1,6 @@
 package com.zifang.z.mq.admin.service;
 
+import com.zifang.z.meta.api.annotation.BizMethod;
 import com.zifang.z.mq.admin.web.dto.Dtos.BrokerInfoDto;
 import com.zifang.z.mq.admin.web.dto.Dtos.ClusterOverviewDto;
 import com.zifang.z.mq.admin.web.dto.Dtos.ConsumerGroupInfoDto;
@@ -10,8 +11,8 @@ import com.zifang.z.mq.common.BrokerData;
 import com.zifang.z.mq.common.TopicConfig;
 import com.zifang.z.mq.common.message.MessageExt;
 import com.zifang.z.mq.tools.admin.ClusterAdmin;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -48,12 +49,14 @@ public class AdminService implements InitializingBean, DisposableBean {
     private ClusterAdmin clusterAdmin;
 
     @Override
+    @BizMethod(name = "afterPropertiesSet", module = "z-mq", description = "", operation = BizMethod.Operation.ACTION)
     public void afterPropertiesSet() {
         clusterAdmin = new ClusterAdmin(namesrvAddr);
         clusterAdmin.start();
     }
 
     @Override
+    @BizMethod(name = "destroy", module = "z-mq", description = "", operation = BizMethod.Operation.ACTION)
     public void destroy() {
         if (clusterAdmin != null) {
             clusterAdmin.shutdown();
@@ -62,6 +65,7 @@ public class AdminService implements InitializingBean, DisposableBean {
 
     // ===== 集群 =====
 
+    @BizMethod(name = "clusterOverview", module = "z-mq", description = "", operation = BizMethod.Operation.ACTION)
     public ClusterOverviewDto clusterOverview() {
         List<BrokerInfoDto> brokerDtos = listBrokers();
 
@@ -96,6 +100,7 @@ public class AdminService implements InitializingBean, DisposableBean {
         return n;
     }
 
+    @BizMethod(name = "listBrokers", module = "z-mq", description = "", operation = BizMethod.Operation.QUERY)
     public List<BrokerInfoDto> listBrokers() {
         Map<String, List<BrokerData>> clusterInfo = clusterAdmin.listBrokers();
         List<BrokerInfoDto> list = new ArrayList<>();
@@ -130,6 +135,7 @@ public class AdminService implements InitializingBean, DisposableBean {
 
     // ===== Topic =====
 
+    @BizMethod(name = "listTopics", module = "z-mq", description = "", operation = BizMethod.Operation.QUERY)
     public List<TopicInfoDto> listTopics() {
         List<TopicInfoDto> list = new ArrayList<>();
         String brokerAddr = firstBrokerAddr();
@@ -149,6 +155,7 @@ public class AdminService implements InitializingBean, DisposableBean {
         return list;
     }
 
+    @BizMethod(name = "createTopic", module = "z-mq", description = "", operation = BizMethod.Operation.CREATE)
     public Map<String, Object> createTopic(String topic, int readQueueNums, int writeQueueNums) {
         Map<String, Object> result = new LinkedHashMap<>();
         String brokerAddr = firstBrokerAddr();
@@ -167,6 +174,7 @@ public class AdminService implements InitializingBean, DisposableBean {
         return result;
     }
 
+    @BizMethod(name = "deleteTopic", module = "z-mq", description = "", operation = BizMethod.Operation.DELETE)
     public Map<String, Object> deleteTopic(String topic) {
         Map<String, Object> result = new LinkedHashMap<>();
         String brokerAddr = firstBrokerAddr();
@@ -187,6 +195,7 @@ public class AdminService implements InitializingBean, DisposableBean {
 
     // ===== 消息 =====
 
+    @BizMethod(name = "queryMessages", module = "z-mq", description = "", operation = BizMethod.Operation.QUERY)
     public List<MessageItemDto> queryMessages(MessageQueryRequest req) {
         if (req == null || req.getTopic() == null || req.getTopic().isEmpty()) {
             return Collections.emptyList();
@@ -220,6 +229,7 @@ public class AdminService implements InitializingBean, DisposableBean {
 
     // ===== 消费组 =====
 
+    @BizMethod(name = "listConsumerGroups", module = "z-mq", description = "", operation = BizMethod.Operation.QUERY)
     public List<ConsumerGroupInfoDto> listConsumerGroups() {
         String brokerAddr = firstBrokerAddr();
         if (brokerAddr == null) {
@@ -291,3 +301,6 @@ public class AdminService implements InitializingBean, DisposableBean {
         return all;
     }
 }
+
+
+

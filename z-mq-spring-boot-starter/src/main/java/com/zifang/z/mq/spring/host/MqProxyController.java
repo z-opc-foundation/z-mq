@@ -1,10 +1,14 @@
 package com.zifang.z.mq.spring.host;
 
 import com.zifang.util.json.JsonUtil;
+import com.zifang.z.meta.api.annotation.BizApi;
+import com.zifang.z.meta.api.annotation.BizField;
+import com.zifang.z.meta.api.annotation.BizParam;
 import com.zifang.z.mq.client.MQClientInstance;
 import com.zifang.z.mq.remoting.netty.NettyClientConfig;
 import com.zifang.z.mq.remoting.protocol.RemotingCommand;
 import com.zifang.z.mq.remoting.protocol.RequestCode;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
@@ -221,6 +224,7 @@ public class MqProxyController {
      * (见类注释)。没有这个端点, "页面空白"会被 100% 误读成"集群里没有 topic"。
      */
     @GetMapping(PREFIX + "/__instance")
+    @BizApi(summary = "自省接口: 这一路到底连的是谁、那两个端口归谁", description = "自省接口: 这一路到底连的是谁、那两个端口归谁。 必须存在, 而且要单独存在一屏 —— ZCompanyMainStarter 的 static{} 对内嵌启动失败是 catch Throwable 静默跳过的, 而 z-mq 这一层更隐蔽: 子进程 spawn 成功、isAlive() 为真, 但 bind 已经失败 (见类注释)。没有这个端点, \"页面空白\"会被 100% 误读成\"集群里没有 topic\"。", tags = { "z-mq" })
     public void instance(HttpServletResponse resp) throws Exception {
         ZMqEmbeddedServerConfig cfg = embeddedProvider.getIfAvailable();
 
@@ -322,19 +326,22 @@ public class MqProxyController {
 
     /** nameserver {@code GET_BROKER_CLUSTER_INFO(4)} → ClusterInfo{brokerAddrTable, clusterAddrTable} */
     @GetMapping(PREFIX + "/cluster")
+    @BizApi(summary = "nameserver GET_BROKER_CLUSTER_INFO(4) → ClusterInfo{brokerAddrTable, clusterAddrTable}", tags = { "z-mq" })
     public void cluster(HttpServletResponse resp) throws Exception {
         emit(resp, callNamesrv(RequestCode.GET_BROKER_CLUSTER_INFO, null));
     }
 
     /** nameserver {@code GET_ALL_TOPIC_LIST(8)} → TopicList{topics:[…]}（只有名字，没有队列数） */
     @GetMapping(PREFIX + "/topics")
+    @BizApi(summary = "nameserver GET_ALL_TOPIC_LIST(8) → TopicList{topics:[…]}（只有名字，没有队列数）", tags = { "z-mq" })
     public void topics(HttpServletResponse resp) throws Exception {
         emit(resp, callNamesrv(RequestCode.GET_ALL_TOPIC_LIST, null));
     }
 
     /** nameserver {@code GET_ROUTEINFO_BY_TOPIC(3)} → TopicRouteData{queueDatas, brokerDatas, …} */
     @GetMapping(PREFIX + "/route")
-    public void route(@RequestParam(value = "topic", required = false) String topic,
+    @BizApi(summary = "nameserver GET_ROUTEINFO_BY_TOPIC(3) → TopicRouteData{queueDatas, brokerDatas, …}", tags = { "z-mq" })
+    public void route(@RequestParam(value = "topic", required = false) @BizParam(name = "topic", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String topic,
                       HttpServletResponse resp) throws Exception {
         if (topic == null || topic.trim().isEmpty()) {
             writeJson(resp, 400, err("topic 参数缺失: /api/mq/route?topic=<name>", String.valueOf(topic)));
@@ -354,32 +361,40 @@ public class MqProxyController {
 
     /** broker {@code GET_ALL_TOPIC_LIST(8)} → TopicListResult{topics:[…]}（本 broker 的 topicConfigTable） */
     @GetMapping(PREFIX + "/broker/topics")
-    public void brokerTopics(@RequestParam(value = "brokerName", required = false) String brokerName,
-                             @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker GET_ALL_TOPIC_LIST(8) → TopicListResult{topics:[…]}（本 broker 的 topicConfigTable）", tags = { "z-mq" })
+    public void brokerTopics(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                             @RequestParam(value = "brokerAddr", required = false)
+                             @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                              HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_TOPIC_LIST, null);
     }
 
     /** broker {@code GET_ALL_TOPIC_CONFIG(320)} → TopicConfigSerializeWrapper{topicConfigTable, dataVersion} */
     @GetMapping(PREFIX + "/broker/topic-config")
-    public void brokerTopicConfig(@RequestParam(value = "brokerName", required = false) String brokerName,
-                                  @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker GET_ALL_TOPIC_CONFIG(320) → TopicConfigSerializeWrapper{topicConfigTable, dataVersion}", tags = { "z-mq" })
+    public void brokerTopicConfig(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                                  @RequestParam(value = "brokerAddr", required = false)
+                                  @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                                   HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_TOPIC_CONFIG, null);
     }
 
     /** broker {@code GET_ALL_CONSUMER_OFFSET(321)} → ConsumerOffsetSerializeWrapper{offsetTable, dataVersion} */
     @GetMapping(PREFIX + "/broker/consumer-offset")
-    public void brokerConsumerOffset(@RequestParam(value = "brokerName", required = false) String brokerName,
-                                     @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker GET_ALL_CONSUMER_OFFSET(321) → ConsumerOffsetSerializeWrapper{offsetTable, dataVersion}", tags = { "z-mq" })
+    public void brokerConsumerOffset(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                                     @RequestParam(value = "brokerAddr", required = false)
+                                     @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                                      HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_CONSUMER_OFFSET, null);
     }
 
     /** broker {@code GET_ALL_DELAY_OFFSET(322)}（由 Topic 自身 offset 推导） */
     @GetMapping(PREFIX + "/broker/delay-offset")
-    public void brokerDelayOffset(@RequestParam(value = "brokerName", required = false) String brokerName,
-                                  @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker GET_ALL_DELAY_OFFSET(322)（由 Topic 自身 offset 推导）", tags = { "z-mq" })
+    public void brokerDelayOffset(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                                  @RequestParam(value = "brokerAddr", required = false)
+                                  @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                                   HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_DELAY_OFFSET, null);
     }
@@ -390,16 +405,20 @@ public class MqProxyController {
      * 所以这一页的空表不是"没有订阅组"，是"上游没实现"，页面必须把这句挂出来。
      */
     @GetMapping(PREFIX + "/broker/subscription")
-    public void brokerSubscription(@RequestParam(value = "brokerName", required = false) String brokerName,
-                                   @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker GET_ALL_SUBSCRIPTION_GROUP(323)", description = "broker GET_ALL_SUBSCRIPTION_GROUP(323)。 已知恒空 ：BrokerOutAPI 对订阅组配置返回的是空 wrapper —— 所以这一页的空表不是\"没有订阅组\"，是\"上游没实现\"，页面必须把这句挂出来。", tags = { "z-mq" })
+    public void brokerSubscription(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                                   @RequestParam(value = "brokerAddr", required = false)
+                                   @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                                    HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.GET_ALL_SUBSCRIPTION_GROUP, null);
     }
 
     /** broker {@code QUERY_DATA_VERSION(324)} → DataVersion{stateVersion, timestamp}（主从增量判断用的版本号） */
     @GetMapping(PREFIX + "/broker/data-version")
-    public void brokerDataVersion(@RequestParam(value = "brokerName", required = false) String brokerName,
-                                  @RequestParam(value = "brokerAddr", required = false) String brokerAddr,
+    @BizApi(summary = "broker QUERY_DATA_VERSION(324) → DataVersion{stateVersion, timestamp}（主从增量判断用的版本号）", tags = { "z-mq" })
+    public void brokerDataVersion(@RequestParam(value = "brokerName", required = false) @BizParam(name = "brokerName", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerName,
+                                  @RequestParam(value = "brokerAddr", required = false)
+                                  @BizParam(name = "brokerAddr", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.QUERY) String brokerAddr,
                                   HttpServletResponse resp) throws Exception {
         emitBroker(resp, brokerName, brokerAddr, RequestCode.QUERY_DATA_VERSION, null);
     }
@@ -415,6 +434,7 @@ public class MqProxyController {
      */
     @RequestMapping(path = PREFIX + "/**",
             method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    @BizApi(summary = "/api/mq/ 的其余子路径一律 404, 且把可用端点列表回显", description = "/api/mq/ 的其余子路径一律 404, 且把可用端点列表回显。 这一条是刻意写的: z-mq 的\"上游\"不是 HTTP, 所以这里 不可能 做 vector/graph 那种 通配透传。写死兜底是为了防止后来人\"顺手补个透传\" —— 那等于把 Netty 协议面 + 全部写码 打开成 HTTP 面。新端点只能一个个加只读码。", tags = { "z-mq" })
     public void fallback(jakarta.servlet.http.HttpServletRequest req, HttpServletResponse resp) throws Exception {
         String sub = req.getRequestURI();
         Map<String, Object> body = err("no such endpoint on the z-mq read surface", sub);
@@ -976,3 +996,6 @@ public class MqProxyController {
         resp.getOutputStream().flush();
     }
 }
+
+
+

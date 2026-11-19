@@ -1,8 +1,11 @@
 package com.zifang.z.mq.admin.web;
 
+import com.zifang.z.meta.api.annotation.BizApi;
+import com.zifang.z.meta.api.annotation.BizField;
+import com.zifang.z.meta.api.annotation.BizParam;
 import com.zifang.z.mq.admin.service.AdminService;
-import com.zifang.z.mq.admin.web.dto.MessageQueryRequest;
 import com.zifang.z.mq.admin.web.dto.Dtos;
+import com.zifang.z.mq.admin.web.dto.MessageQueryRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,22 +32,26 @@ public class ZMqAdminController {
     }
 
     @GetMapping("/cluster/overview")
+    @BizApi(summary = "clusterOverview", description = "", tags = { "z-mq" })
     public Dtos.ClusterOverviewDto clusterOverview() {
         return adminService.clusterOverview();
     }
 
     @GetMapping("/cluster/brokers")
+    @BizApi(summary = "listBrokers", description = "", tags = { "z-mq" })
     public List<Dtos.BrokerInfoDto> listBrokers() {
         return adminService.listBrokers();
     }
 
     @GetMapping("/topics")
+    @BizApi(summary = "listTopics", description = "", tags = { "z-mq" })
     public List<Dtos.TopicInfoDto> listTopics() {
         return adminService.listTopics();
     }
 
     @PostMapping("/topics")
-    public Map<String, Object> createTopic(@RequestBody Map<String, Object> body) {
+    @BizApi(summary = "createTopic", description = "", tags = { "z-mq" })
+    public Map<String, Object> createTopic(@RequestBody @BizParam(name = "body", type = BizField.FieldType.JSON, description = "", position = BizParam.Position.BODY) Map<String, Object> body) {
         String topic = String.valueOf(body.get("topic"));
         int readQueueNums = intOf(body.get("readQueueNums"), 4);
         int writeQueueNums = intOf(body.get("writeQueueNums"), 4);
@@ -52,16 +59,19 @@ public class ZMqAdminController {
     }
 
     @DeleteMapping("/topics/{topic}")
-    public Map<String, Object> deleteTopic(@PathVariable("topic") String topic) {
+    @BizApi(summary = "deleteTopic", description = "", tags = { "z-mq" })
+    public Map<String, Object> deleteTopic(@PathVariable("topic") @BizParam(name = "topic", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.PATH) String topic) {
         return adminService.deleteTopic(topic);
     }
 
     @PostMapping("/messages/query")
-    public List<Dtos.MessageItemDto> queryMessages(@RequestBody MessageQueryRequest req) {
+    @BizApi(summary = "queryMessages", description = "", tags = { "z-mq" })
+    public List<Dtos.MessageItemDto> queryMessages(@RequestBody @BizParam(name = "req", type = BizField.FieldType.STRING, description = "", position = BizParam.Position.BODY) MessageQueryRequest req) {
         return adminService.queryMessages(req);
     }
 
     @GetMapping("/consumer/groups")
+    @BizApi(summary = "listConsumerGroups", description = "", tags = { "z-mq" })
     public List<Dtos.ConsumerGroupInfoDto> listConsumerGroups() {
         return adminService.listConsumerGroups();
     }
@@ -80,3 +90,6 @@ public class ZMqAdminController {
         }
     }
 }
+
+
+

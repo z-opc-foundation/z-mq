@@ -68,6 +68,7 @@
     </modules>
 
     <properties>
+        <z-meta.version>1.0.2</z-meta.version>
         <!-- Java Version -->
         <!-- 版本单一真源：抬号只改这一行（配下方常开 flatten，入库/发布件里落成字面量） -->
         <revision>1.3.3</revision>
@@ -365,6 +366,11 @@
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.github.yuku123</groupId>
+                <artifactId>z-meta-api</artifactId>
+                <version>${z-meta.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
